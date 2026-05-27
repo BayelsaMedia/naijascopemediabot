@@ -11,10 +11,13 @@ const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const rssParser = new RSSParser();
-
 const conversationHistory = new Map();
+
+function getGenAI() {
+  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
+  return new GoogleGenerativeAI(GEMINI_API_KEY);
+}
 
 async function sendMessage(to, text) {
   try {
@@ -48,7 +51,8 @@ async function markAsRead(messageId) {
         headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
       }
     );
-  } catch {
+  } catch (err) {
+    console.error("markAsRead error:", err?.response?.data || err.message);
   }
 }
 
@@ -62,13 +66,15 @@ async function fetchNews() {
     });
     msg += "Visit www.bayelsamedia.com.ng for full stories 🇳🇬";
     return msg;
-  } catch {
+  } catch (err) {
+    console.error("fetchNews error:", err.message);
     return "Visit www.bayelsamedia.com.ng for the latest news! 📰";
   }
 }
 
 async function getGeminiResponse(userId, userMessage) {
   try {
+    const genAI = getGenAI();
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
       systemInstruction:
@@ -119,6 +125,10 @@ const CONTACT_INFO = `📞 NaijaScope Media Contact:
 
 We'd love to hear from you! 🇳🇬`;
 
+app.get("/", (req, res) => {
+  res.status(200).send("NaijaScope Media Bot is running");
+});
+
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -138,7 +148,7 @@ app.post("/webhook", (req, res) => {
   (async () => {
     try {
       const body = req.body;
-      if (body.object !== "whatsapp_business_account") return;
+      if (!body || body.object !== "whatsapp_business_account") return;
 
       const entry = body.entry?.[0];
       const changes = entry?.changes?.[0];
@@ -150,6 +160,8 @@ app.post("/webhook", (req, res) => {
       const message = messages[0];
       const from = message.from;
       const messageId = message.id;
+
+      if (!from || !messageId) return;
 
       await markAsRead(messageId);
 
@@ -163,7 +175,7 @@ app.post("/webhook", (req, res) => {
         return;
       }
 
-      if (message.type !== "text") return;
+      if (message.type !== "text" || !message.text?.body) return;
 
       const text = message.text.body.trim().toLowerCase();
 
