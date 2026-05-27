@@ -12,5 +12,11 @@
   "devDependencies": {
     "prettier": "^3.8.3",
     "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.16.1",
+    "express": "^5.2.1",
+    "rss-parser": "^3.13.0"
   }
 }
