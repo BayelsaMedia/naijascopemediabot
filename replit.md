@@ -1,6 +1,6 @@
-# [Project name]
+# NaijaScopeMediaBot
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A Node.js API server template for NaijaScopeMediaBot.
 
 ## Run & Operate
 
