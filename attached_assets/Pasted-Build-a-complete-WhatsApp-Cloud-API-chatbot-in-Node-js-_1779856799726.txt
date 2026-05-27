@@ -1,0 +1,108 @@
+Build a complete WhatsApp Cloud API chatbot in Node.js.
+Bot name: NaijaScope Media Bot
+
+PACKAGES: express, axios, @google/generative-ai, rss-parser
+
+Create one file: index.js and a package.json
+
+ENVIRONMENT VARIABLES - use these exact values via process.env:
+- WHATSAPP_TOKEN = EAAchv20eQFsBRiXitAj9MUJikgm3ZA2ygHvyDxJRPsw8UIlwYAt7jTKEVjmEvrYoVhREPxZAoJ6e5V8bbQkeOXUvZAZB23fMbOfXKU4nbprkiSbPMvyCvzHLZCkYfsa8ZCVtBBRN94Uln6Ud5DempzmV3wWefKcf3ZAiUg9A6vmDb1V8FYRGHpEUD0xELsNnljx5uQPfViUSjiwlUuKYl9dvOeYB6hhVK3lUlxnF5GEvM2aD7dTmGfX9RzlAtbQuCm59dDZABbtl5nzU0JuSpocDI7vRJwZDZD
+- PHONE_NUMBER_ID = 1154177067776916
+- VERIFY_TOKEN = naijascope2026
+- GEMINI_API_KEY = AIzaSyDVilrJWhGO88GRX1q2LGiTICVPtdhAopY
+
+WEBHOOK:
+- GET /webhook: verify using hub.mode, hub.verify_token, hub.challenge
+- POST /webhook: send res.sendStatus(200) as VERY FIRST LINE, then process message in try/catch
+- Handle text, image, and audio message types
+
+MESSAGE ROUTING (check lowercase text):
+- "news" or "latest" or "headlines" → call fetchNews()
+- "help" or "menu" or "hi" or "hello" or "start" → send welcome menu
+- "contact" → send contact info
+- everything else → send to Gemini AI
+
+WELCOME MENU (send this exact text):
+"👋 Welcome to NaijaScope Media Bot!
+
+Your smart news and information assistant.
+
+What I can do:
+
+📰 NEWS - Type 'news' for latest NaijaScope articles
+🤖 ASK ME - Type any question for AI answers
+📞 CONTACT - Type 'contact' for our info
+ℹ️ HELP - Type 'help' to see this menu
+
+Powered by NaijaScope Media 🇳🇬
+www.bayelsamedia.com.ng"
+
+NEWS FETCHING (fetchNews function):
+- Use rss-parser to fetch: https://www.bayelsamedia.com.ng/feed
+- Get latest 5 articles
+- Format as:
+"📰 Latest from NaijaScope Media:
+
+1. [title]
+🔗 [link]
+
+2. [title]
+🔗 [link]
+
+3. [title]
+🔗 [link]
+
+4. [title]
+🔗 [link]
+
+5. [title]
+🔗 [link]
+
+Visit www.bayelsamedia.com.ng for full stories 🇳🇬"
+- On error return: "Visit www.bayelsamedia.com.ng for the latest news! 📰"
+
+GEMINI AI (getGeminiResponse function):
+- Use @google/generative-ai, model: gemini-1.5-flash
+- Store conversation history per user in a Map (max 20 messages)
+- System instruction: "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology questions. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words. Always recommend visiting www.bayelsamedia.com.ng for latest news."
+- On error return: "I am having a small issue right now. Please try again shortly!"
+
+CONTACT INFO (when user types contact):
+"📞 NaijaScope Media Contact:
+
+🌐 Website: www.bayelsamedia.com.ng
+📧 Email: admin@bayelsamedia.com.ng
+
+We'd love to hear from you! 🇳🇬"
+
+IMAGE MESSAGES:
+Reply: "📷 I received your image! Please describe what you need help with and I will assist you."
+
+VOICE/AUDIO MESSAGES:
+Reply: "🎤 I received your voice note! Please type your message and I will be happy to help."
+
+SEND MESSAGE function:
+- POST to https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages
+- Body: { messaging_product: "whatsapp", to, type: "text", text: { body: text } }
+- Authorization: Bearer ${WHATSAPP_TOKEN}
+- try/catch with console.error on failure
+
+MARK AS READ function:
+- POST to https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages
+- Body: { messaging_product: "whatsapp", status: "read", message_id: messageId }
+- Authorization: Bearer ${WHATSAPP_TOKEN}
+- Silent try/catch
+
+ERROR HANDLING:
+- Every async function wrapped in try/catch
+- Always return friendly message to user on any error
+- Never crash the server
+
+SERVER:
+- Listen on process.env.PORT || 3000
+- Log: "NaijaScope Media Bot is running on port 3000"
+
+PACKAGE.JSON:
+- name: naijascopemediabot
+- start script: "node index.js"
+- dependencies: express, axios, @google/generative-ai, rss-parser
