@@ -1,0 +1,180 @@
+You are an expert Node.js developer. Review and completely rewrite 
+the current index.js to be a production-ready WhatsApp Business 
+Cloud API chatbot that meets 100% of Meta's webhook requirements.
+
+=== STRICT WHATSAPP WEBHOOK REQUIREMENTS ===
+
+1. GET /webhook route MUST:
+   - Read exactly: req.query["hub.mode"], req.query["hub.verify_token"], 
+     req.query["hub.challenge"]
+   - Return res.status(200).send(challenge) when mode is "subscribe" 
+     AND token matches VERIFY_TOKEN
+   - Return res.sendStatus(403) for any other case
+   - This must work within 5 seconds or Meta rejects it
+
+2. POST /webhook route MUST:
+   - Send res.sendStatus(200) as the ABSOLUTE FIRST LINE before 
+     anything else — Meta requires acknowledgment within 1 second
+   - Process message AFTER sending 200
+   - Correctly extract message from: 
+     body.entry[0].changes[0].value.messages[0]
+   - Check body.object === "whatsapp_business_account" first
+   - Handle null/undefined at every level with optional chaining (?.)
+   - Never throw unhandled errors
+
+3. SERVER MUST:
+   - Listen on process.env.PORT (not hardcoded 3000)
+   - Have a GET / route returning plain text "NaijaScope Media Bot 
+     is running" for Render health checks
+   - Start within 10 seconds or Render kills it
+
+=== BOT FEATURES TO BUILD ===
+
+ENVIRONMENT VARIABLES (process.env only, never hardcode):
+- WHATSAPP_TOKEN
+- PHONE_NUMBER_ID  
+- VERIFY_TOKEN
+- GEMINI_API_KEY
+
+PACKAGES REQUIRED:
+- express (version 4.18.2 exactly — NOT version 5)
+- axios
+- @google/generative-ai
+- rss-parser
+
+MESSAGE HANDLING:
+Route incoming text messages by keyword (all lowercase):
+- "news" or "latest" or "headlines" → fetchNews()
+- "hello" or "hi" or "start" or "help" or "menu" → sendWelcome()
+- "contact" → sendContact()
+- anything else → getGeminiResponse()
+
+If message type is "image":
+Reply: "📷 I received your image! Please describe what you 
+need help with and I will assist you."
+
+If message type is "audio":
+Reply: "🎤 I received your voice note! Please type your 
+message and I will be happy to help."
+
+WELCOME MESSAGE (exact text):
+"👋 Welcome to NaijaScope Media Bot!
+
+Your smart news and information assistant.
+
+What I can do:
+
+📰 NEWS - Type 'news' for latest NaijaScope articles
+🤖 ASK ME - Type any question for AI answers  
+📞 CONTACT - Type 'contact' for our info
+ℹ️ HELP - Type 'help' to see this menu again
+
+Powered by NaijaScope Media 🇳🇬
+www.bayelsamedia.com.ng"
+
+NEWS FETCHING (fetchNews function):
+- Use rss-parser to fetch https://www.bayelsamedia.com.ng/feed
+- Return latest 5 articles formatted as:
+
+"📰 Latest from NaijaScope Media:
+
+1. [title]
+🔗 [link]
+
+2. [title]
+🔗 [link]
+
+3. [title]
+🔗 [link]
+
+4. [title]
+🔗 [link]
+
+5. [title]
+🔗 [link]
+
+Visit www.bayelsamedia.com.ng for full stories 🇳🇬"
+
+- On any error return: 
+  "Visit www.bayelsamedia.com.ng for the latest news! 📰"
+
+GEMINI AI (getGeminiResponse function):
+- Package: @google/generative-ai
+- Model: gemini-1.5-flash
+- API key from process.env.GEMINI_API_KEY
+- Store per-user conversation history in a Map object
+- Key = sender phone number, Value = array of messages
+- Max 20 messages per user then slice oldest
+- System instruction:
+  "You are NaijaScope Media Bot, a smart assistant for 
+  NaijaScope Media, a Nigerian news and media platform at 
+  www.bayelsamedia.com.ng. Help users with Nigerian news, 
+  politics, entertainment, sports, business and technology. 
+  Be friendly and concise. Use plain text only — no asterisks, 
+  no hashtags, no markdown formatting of any kind. Keep all 
+  replies under 250 words. Always recommend visiting 
+  www.bayelsamedia.com.ng for the latest news."
+- On any error return: 
+  "I am having a small issue. Please try again shortly!"
+
+CONTACT MESSAGE (exact text):
+"📞 NaijaScope Media Contact:
+
+🌐 Website: www.bayelsamedia.com.ng
+📧 Email: admin@bayelsamedia.com.ng
+
+We'd love to hear from you! 🇳🇬"
+
+SEND MESSAGE function (sendMessage):
+- POST to: 
+  https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages
+- Request body:
+  { messaging_product: "whatsapp", to, type: "text", 
+    text: { body: text } }
+- Headers:
+  { Authorization: "Bearer " + WHATSAPP_TOKEN,
+    "Content-Type": "application/json" }
+- Full try/catch with console.error on failure
+
+MARK AS READ function (markAsRead):
+- POST to same messages endpoint
+- Body: 
+  { messaging_product: "whatsapp", status: "read", 
+    message_id: messageId }
+- Same auth header
+- Silent try/catch — ignore all errors
+
+=== ERROR HANDLING RULES ===
+- Every single async function must have try/catch
+- Server must NEVER crash under any circumstance
+- All errors logged to console with descriptive label
+- User always receives a friendly reply even when error occurs
+- No unhandled promise rejections
+
+=== PACKAGE.JSON REQUIREMENTS ===
+Create a clean package.json with exactly:
+{
+  "name": "naijascopemediabot",
+  "version": "1.0.0",
+  "description": "NaijaScope Media WhatsApp Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "@google/generative-ai": "^0.21.0",
+    "rss-parser": "^3.13.0"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
+
+=== AFTER BUILDING ===
+Show me:
+1. The complete index.js code
+2. The complete package.json
+3. Confirm all webhook routes meet Meta standards
+4. Confirm server listens on process.env.PORT
