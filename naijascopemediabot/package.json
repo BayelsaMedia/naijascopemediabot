@@ -1,0 +1,14 @@
+{
+  "name": "naijascopemediabot",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.7.9",
+    "express": "^5.2.1",
+    "rss-parser": "^3.13.0"
+  }
+}
