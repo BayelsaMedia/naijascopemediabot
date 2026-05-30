@@ -1,0 +1,71 @@
+I already have a working WhatsApp bot built with Node.js and Express on Replit.
+DO NOT rewrite or replace my existing code. Instead, carefully read all existing
+files first, then make ONLY the following targeted updates:
+
+─────────────────────────────────────────
+STEP 1 — READ EXISTING CODE FIRST
+─────────────────────────────────────────
+Before making any changes, read and understand:
+- index.js (or app.js — whichever is the main entry file)
+- package.json
+- Any other .js files in the project
+
+─────────────────────────────────────────
+STEP 2 — REPLACE HARDCODED VALUES ONLY
+─────────────────────────────────────────
+Find any hardcoded tokens, phone number IDs, or API keys and replace them
+with these environment variable references. Do not touch anything else:
+
+  const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+  const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+  const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+The WhatsApp send endpoint must be:
+  const url = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
+
+─────────────────────────────────────────
+STEP 3 — CHECK AND PATCH THESE SECTIONS
+─────────────────────────────────────────
+Only add or fix the following if they are missing or broken in the existing code.
+Do NOT duplicate anything that already works:
+
+A) WEBHOOK VERIFICATION (GET /webhook)
+   - Must read hub.mode, hub.verify_token, hub.challenge from query params
+   - If mode === "subscribe" AND token matches VERIFY_TOKEN → send challenge
+   - Otherwise → send 403
+
+B) RECEIVE MESSAGES (POST /webhook)
+   - Must extract sender phone number and message text from the payload
+   - Must pass message text to Gemini AI via @google/generative-ai SDK
+   - Must send Gemini's reply back via WhatsApp Cloud API
+   - Must return HTTP 200 to Meta immediately on every incoming request
+
+C) SEND MESSAGE FUNCTION
+   - Must use axios POST to the WhatsApp API URL
+   - Must include Authorization: Bearer ${WHATSAPP_TOKEN} header
+   - Payload must include: messaging_product, to, type: "text", text.body
+
+D) ERROR HANDLING
+   - All Gemini and WhatsApp API calls must be inside try/catch blocks
+   - Errors must be logged to console without crashing the server
+
+E) SERVER START
+   - Must listen on process.env.PORT or fallback to 3000
+   - Must log a message confirming the bot started successfully
+
+─────────────────────────────────────────
+STEP 4 — PACKAGE.JSON CHECK
+─────────────────────────────────────────
+Ensure package.json has:
+  "scripts": { "start": "node index.js" }
+And these dependencies are listed (install only if missing):
+  express, axios, @google/generative-ai
+
+─────────────────────────────────────────
+RULES
+─────────────────────────────────────────
+- Do NOT delete or rewrite any existing logic
+- Do NOT hardcode any token, key, or phone number
+- Do NOT add new features beyond what is listed above
+- Show a clear diff or summary of every change you made
