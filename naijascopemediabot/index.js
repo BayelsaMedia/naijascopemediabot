@@ -22,7 +22,7 @@ function getGenAI() {
 async function sendMessage(to, text) {
   try {
     await axios.post(
-      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: "whatsapp",
         to,
@@ -41,7 +41,7 @@ async function sendMessage(to, text) {
 async function markAsRead(messageId) {
   try {
     await axios.post(
-      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: "whatsapp",
         status: "read",
