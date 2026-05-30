@@ -1,0 +1,99 @@
+My WhatsApp bot webhook is failing Meta's verification with this error:
+"The callback URL or verify token couldn't be validated."
+
+DO NOT rewrite my existing code. Read all existing files first, then
+diagnose and fix ONLY what is causing the webhook verification to fail.
+
+─────────────────────────────────────────
+STEP 1 — READ ALL FILES FIRST
+─────────────────────────────────────────
+Read index.js (or app.js), package.json, and any other .js files.
+Understand the full existing code before touching anything.
+
+─────────────────────────────────────────
+STEP 2 — CHECK AND FIX THE GET /webhook ROUTE
+─────────────────────────────────────────
+This is the most common cause of the error. The GET /webhook handler
+MUST look exactly like this — fix it if it differs in any way:
+
+  app.get('/webhook', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === process.env.VERIFY_TOKEN) {
+      console.log('Webhook verified successfully');
+      res.status(200).send(challenge);
+    } else {
+      console.error('Webhook verification failed — token mismatch or wrong mode');
+      res.sendStatus(403);
+    }
+  });
+
+Critical rules for this route:
+- It must respond with res.status(200).send(challenge) — plain text only
+- Do NOT use res.json(), res.send({ challenge }), or wrap it in an object
+- Do NOT add any extra text, headers, or body around the challenge
+- The challenge must be the raw string exactly as received from Meta
+- process.env.VERIFY_TOKEN must equal exactly: naijascope2026
+
+─────────────────────────────────────────
+STEP 3 — CHECK MIDDLEWARE ORDER
+─────────────────────────────────────────
+Make sure express.json() middleware is declared BEFORE the routes,
+not after. Wrong order can corrupt GET request handling:
+
+  // CORRECT ORDER:
+  const app = express();
+  app.use(express.json());        // ← must come first
+  app.get('/webhook', ...);       // ← then routes
+  app.post('/webhook', ...);
+
+─────────────────────────────────────────
+STEP 4 — CHECK SERVER IS LISTENING ON CORRECT PORT
+─────────────────────────────────────────
+The server MUST listen on process.env.PORT with a fallback:
+
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+
+Do NOT hardcode a port number. Render assigns PORT dynamically.
+
+─────────────────────────────────────────
+STEP 5 — ADD A ROOT HEALTH CHECK ROUTE
+─────────────────────────────────────────
+Add this route if it doesn't already exist. It confirms the server
+is publicly reachable before Meta even tries the webhook:
+
+  app.get('/', (req, res) => {
+    res.status(200).send('NaijaScope Media Bot is running.');
+  });
+
+─────────────────────────────────────────
+STEP 6 — CHECK FOR CRASHES ON STARTUP
+─────────────────────────────────────────
+Look for any code that runs at startup and could crash the server
+before the webhook route is reachable. Common causes:
+- Missing required environment variables throwing errors
+- Database or external API connections failing at startup
+- Syntax errors or missing imports
+Fix any crash risks by wrapping startup logic in try/catch.
+
+─────────────────────────────────────────
+STEP 7 — VERIFY ENVIRONMENT VARIABLE NAME
+─────────────────────────────────────────
+Confirm the code uses exactly:
+  process.env.VERIFY_TOKEN
+
+NOT process.env.VEIFY_TOKEN (missing R — common typo).
+Search the entire codebase for VEIFY and replace with VERIFY if found.
+
+─────────────────────────────────────────
+AFTER ALL FIXES — SHOW ME:
+─────────────────────────────────────────
+1. A list of every change you made and which file it was in
+2. The final complete GET /webhook route as it now appears
+3. Confirm the server startup log message
+4. Confirm no hardcoded tokens or keys remain anywhere

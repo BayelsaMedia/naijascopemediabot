@@ -1,0 +1,152 @@
+My WhatsApp bot webhook is failing Meta's verification with this error:
+"The callback URL or verify token couldn't be validated."
+
+DO NOT rewrite my existing code. Read all existing files first, then
+diagnose and fix ONLY what is causing the webhook verification to fail.
+
+─────────────────────────────────────────
+STEP 1 — READ ALL FILES FIRST
+─────────────────────────────────────────
+Read index.js (or app.js), package.json, and any other .js files.
+Understand the full existing code before touching anything.
+
+─────────────────────────────────────────
+STEP 2 — CHECK AND FIX THE GET /webhook ROUTE
+─────────────────────────────────────────
+This is the most common cause of the error. The GET /webhook handler
+MUST look exactly like this — fix it if it differs in any way:
+
+  app.get('/webhook', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === process.env.VERIFY_TOKEN) {
+      console.log('Webhook verified successfully');
+      res.status(200).send(challenge);
+    } else {
+      console.error('Webhook verification failed — token mismatch or wrong mode');
+      res.sendStatus(403);
+    }
+  });
+
+Critical rules for this route:
+- It must respond with res.status(200).send(challenge) — plain text only
+- Do NOT use res.json(), res.send({ challenge }), or wrap it in an object
+- Do NOT add any extra text, headers, or body around the challenge
+- The challenge must be the raw string exactly as received from Meta
+- process.env.VERIFY_TOKEN must equal exactly: naijascope2026
+
+─────────────────────────────────────────
+STEP 3 — CHECK MIDDLEWARE ORDER
+─────────────────────────────────────────
+Make sure express.json() middleware is declared BEFORE the routes,
+not after. Wrong order can corrupt GET request handling:
+
+  // CORRECT ORDER:
+  const app = express();
+  app.use(express.json());        // ← must come first
+  app.get('/webhook', ...);       // ← then routes
+  app.post('/webhook', ...);
+
+─────────────────────────────────────────
+STEP 4 — CHECK SERVER IS LISTENING ON CORRECT PORT
+─────────────────────────────────────────
+The server MUST listen on process.env.PORT with a fallback:
+
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+
+Do NOT hardcode a port number. Render assigns PORT dynamically.
+
+─────────────────────────────────────────
+STEP 5 — ADD A ROOT HEALTH CHECK ROUTE
+─────────────────────────────────────────
+Add this route if it doesn't already exist. It confirms the server
+is publicly reachable before Meta even tries the webhook:
+
+  app.get('/', (req, res) => {
+    res.status(200).send('NaijaScope Media Bot is running.');
+  });
+
+─────────────────────────────────────────
+STEP 6 — CHECK FOR CRASHES ON STARTUP
+─────────────────────────────────────────
+Look for any code that runs at startup and could crash the server
+before the webhook route is reachable. Common causes:
+- Missing required environment variables throwing errors
+- Database or external API connections failing at startup
+- Syntax errors or missing imports
+Fix any crash risks by wrapping startup logic in try/catch.
+
+─────────────────────────────────────────
+STEP 7 — VERIFY ENVIRONMENT VARIABLE NAME
+─────────────────────────────────────────
+Confirm the code uses exactly:
+  process.env.VERIFY_TOKEN
+
+NOT process.env.VEIFY_TOKEN (missing R — common typo).
+Search the entire codebase for VEIFY and replace with VERIFY if found.
+
+─────────────────────────────────────────
+STEP 8 — ENFORCE CORRECT WHATSAPP API VERSION
+─────────────────────────────────────────
+Find any line in the code that constructs the WhatsApp messages URL
+and ensure it uses exactly v25.0 — not v19.0 or any other version.
+The correct URL must be:
+
+  const url = `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`;
+
+If any older version like v19.0, v17.0, or v16.0 is found anywhere
+in the codebase, replace it with v25.0 immediately.
+This must be consistent across ALL files — not just index.js.
+
+─────────────────────────────────────────
+STEP 9 — REPORT RENDER DEPLOYMENT SETTINGS
+─────────────────────────────────────────
+After all fixes, read the project structure and report the exact
+values I must enter in Render's dashboard to deploy this bot
+successfully. Present them in this exact format:
+
+  RENDER DEPLOYMENT SETTINGS
+  ──────────────────────────
+  Root Directory   : (the folder containing index.js/app.js,
+                     e.g. "." if it is at the project root,
+                     or "src" / "server" if nested)
+
+  Build Command    : (e.g. "npm install" — the command Render
+                     runs once to install dependencies)
+
+  Start Command    : (e.g. "node index.js" or "npm start" —
+                     the command Render runs to launch the server.
+                     Read the "start" script in package.json and
+                     use that exact value)
+
+  ENVIRONMENT VARIABLES REQUIRED ON RENDER
+  ─────────────────────────────────────────
+  List every process.env.VARIABLE_NAME found anywhere in the
+  codebase in this table format:
+
+  | KEY                          | WHERE IT IS USED          |
+  |------------------------------|---------------------------|
+  | WHATSAPP_TOKEN               | Sending WhatsApp messages |
+  | PHONE_NUMBER_ID              | WhatsApp API URL          |
+  | VERIFY_TOKEN                 | Webhook verification      |
+  | GEMINI_API_KEY               | Gemini AI responses       |
+  | PORT                         | Server port (auto-set by  |
+  |                              | Render, do not add this)  |
+
+  If any additional process.env variables are found beyond the
+  five listed above, add them to the table with their usage.
+  Flag any variable that is used in the code but NOT yet set
+  in Render or Replit Secrets with a ⚠️ WARNING label.
+
+─────────────────────────────────────────
+AFTER ALL FIXES — SHOW ME:
+─────────────────────────────────────────
+1. A list of every change you made and which file it was in
+2. The final complete GET /webhook route as it now appears
+3. Confirm the server startup log message
+4. Confirm no hardcoded tokens or keys remain anywhere
