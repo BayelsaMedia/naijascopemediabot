@@ -12,7 +12,7 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const SYSTEM_PROMPT =
-  "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words.";
+  "You are the NaijaScope Media Bot, a smart, friendly and highly intelligent news and information assistant for Nigeria, specializing in the Niger Delta region, Bayelsa State, oil and gas news, Nigerian politics, and current affairs. You work for NaijaScope Media at www.bayelsamedia.com.ng. You are conversational, witty, warm and knowledgeable. Answer every question intelligently and in detail. Never say you cannot help. If asked about news, summarize what you know and direct users to the website for full stories. Use plain text only, no asterisks or markdown.";
 
 const parser = new RSSParser();
 const conversations = new Map();
@@ -46,11 +46,11 @@ app.post("/webhook", async (req, res) => {
       const text = message.text.body.toLowerCase();
       await markAsRead(message.id);
       let reply;
-      if (text.includes("news") || text.includes("latest") || text.includes("headlines")) {
+      if (text === "news") {
         reply = await fetchNews();
-      } else if (text.includes("contact")) {
+      } else if (text === "contact") {
         reply = "📞 NaijaScope Media Contact:\n\n🌐 Website: www.bayelsamedia.com.ng\n📧 Email: admin@bayelsamedia.com.ng\n\nWe'd love to hear from you! 🇳🇬";
-      } else if (text.includes("help") || text.includes("menu") || text.includes("hi") || text.includes("hello") || text.includes("start")) {
+      } else if (text === "help") {
         reply = "👋 Welcome to NaijaScope Media Bot!\n\nYour smart news and information assistant.\n\nWhat I can do:\n\n📰 NEWS - Type 'news' for latest articles\n🤖 ASK ME - Type any question for AI answers\n📞 CONTACT - Type 'contact' for our info\nℹ️ HELP - Type 'help' to see this menu\n\nPowered by NaijaScope Media 🇳🇬\nwww.bayelsamedia.com.ng";
       } else {
         reply = await getAIResponse(from, message.text.body);
@@ -116,7 +116,7 @@ async function getAIResponse(userId, userMessage) {
     history.push({ role: "user", content: userMessage });
     history.push({ role: "assistant", content: reply });
 
-    if (history.length > 20) history.splice(0, history.length - 20);
+    if (history.length > 10) history.splice(0, history.length - 10);
 
     return reply;
   } catch (err) {
