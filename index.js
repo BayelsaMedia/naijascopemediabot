@@ -11,9 +11,13 @@ const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const parser = new RSSParser();
 const conversations = new Map();
+
+function getGenAI() {
+  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
+  return new GoogleGenerativeAI(GEMINI_API_KEY);
+}
 
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -79,7 +83,7 @@ async function getGeminiResponse(userId, userMessage) {
   try {
     if (!conversations.has(userId)) conversations.set(userId, []);
     const history = conversations.get(userId);
-    const model = genAI.getGenerativeModel({
+    const model = getGenAI().getGenerativeModel({
       model: "gemini-1.5-flash",
       systemInstruction: "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words.",
     });

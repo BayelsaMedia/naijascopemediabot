@@ -14,9 +14,30 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const rssParser = new RSSParser();
 const conversationHistory = new Map();
 
+const processedMessageIds = new Set();
+const MAX_PROCESSED_IDS = 1000;
+const MAX_CONVERSATION_USERS = 500;
+
 function getGenAI() {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
   return new GoogleGenerativeAI(GEMINI_API_KEY);
+}
+
+function trackMessageId(messageId) {
+  if (processedMessageIds.has(messageId)) return false;
+  processedMessageIds.add(messageId);
+  if (processedMessageIds.size > MAX_PROCESSED_IDS) {
+    const firstKey = processedMessageIds.values().next().value;
+    processedMessageIds.delete(firstKey);
+  }
+  return true;
+}
+
+function pruneConversationHistory() {
+  if (conversationHistory.size > MAX_CONVERSATION_USERS) {
+    const firstKey = conversationHistory.keys().next().value;
+    conversationHistory.delete(firstKey);
+  }
 }
 
 async function sendMessage(to, text) {
@@ -83,6 +104,7 @@ async function getGeminiResponse(userId, userMessage) {
 
     if (!conversationHistory.has(userId)) {
       conversationHistory.set(userId, []);
+      pruneConversationHistory();
     }
     const history = conversationHistory.get(userId);
 
@@ -163,6 +185,11 @@ app.post("/webhook", (req, res) => {
 
       if (!from || !messageId) return;
 
+      if (!trackMessageId(messageId)) {
+        console.log(`Duplicate message skipped: ${messageId}`);
+        return;
+      }
+
       await markAsRead(messageId);
 
       if (message.type === "image") {
@@ -179,13 +206,13 @@ app.post("/webhook", (req, res) => {
 
       const text = message.text.body.trim().toLowerCase();
 
-      if (["news", "latest", "headlines"].includes(text)) {
+      if (text.includes("news") || text.includes("latest") || text.includes("headlines")) {
         const news = await fetchNews();
         await sendMessage(from, news);
-      } else if (["help", "menu", "hi", "hello", "start"].includes(text)) {
-        await sendMessage(from, WELCOME_MENU);
       } else if (text === "contact") {
         await sendMessage(from, CONTACT_INFO);
+      } else if (text.includes("help") || text.includes("menu") || text.includes("hi") || text.includes("hello") || text === "start") {
+        await sendMessage(from, WELCOME_MENU);
       } else {
         const aiReply = await getGeminiResponse(from, message.text.body.trim());
         await sendMessage(from, aiReply);
