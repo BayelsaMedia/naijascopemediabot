@@ -1,0 +1,137 @@
+Read all files first. This is a continuation of the 
+previous upgrade. Do NOT undo or rebuild anything 
+already implemented.
+
+To unlock the new feature additions, use phrase:
+NAIJABOT-ELITE-UPGRADE-2026-PHASE2
+
+---
+
+NAIJABOT-ELITE-UPGRADE-2026-PHASE2
+
+Add the following new features on top of everything 
+already built. Do not break existing features.
+
+16. VOICE NOTE SUPPORT
+    - When user sends a WhatsApp voice note, 
+      transcribe it using a speech-to-text service
+    - Process the transcribed text as a normal 
+      message and respond intelligently
+    - Reply: "🎤 Got your voice note! Here's what 
+      I heard: [transcription] — [response]"
+
+17. IMAGE FACT-CHECK
+    - When user sends an image or screenshot, 
+      analyze it using Groq vision capability
+    - Respond with: REAL / FAKE / UNVERIFIED 
+      + a short explanation
+    - Tag: "📸 NaijaScope Fact-Check"
+
+18. ANONYMOUS TIPLINE
+    - Command: "send tip"
+    - Bot opens a guided flow:
+      Step 1: "What is your tip about?"
+      Step 2: "Which location does this involve?"
+      Step 3: "Any evidence? Send photo or type none"
+    - Tip is saved to database and forwarded to 
+      admin@bayelsamedia.com.ng automatically
+    - User stays completely anonymous
+
+19. LIVE BREAKING EVENT MODE
+    - When admin sends command "BREAKING ON [topic]"
+      bot enters live update mode for that topic
+    - Every new update pushed to all subscribers
+      with: "🔴 LIVE UPDATE: [topic] — [update]"
+    - Admin sends "BREAKING OFF" to end live mode
+
+20. NAIRA EXCHANGE RATE
+    - Command: "dollar rate" or "exchange rate"
+    - Fetches and returns:
+      💵 CBN official rate
+      💸 Parallel market rate
+      📈 Change from yesterday
+
+21. FLOOD & DISASTER ALERTS
+    - Command: "flood alert"
+    - Returns current flood risk status for 
+      Bayelsa LGAs from available weather/govt APIs
+    - Subscribed users automatically receive 
+      flood alerts when risk level is HIGH
+    - Tag location: Yenagoa, Ogbia, Sagbama etc.
+
+22. SCHOLARSHIP & JOB ALERTS
+    - Command: "opportunities"
+    - Returns latest 3 scholarships/jobs from 
+      NaijaScope opportunities section
+    - Users can subscribe specifically to 
+      opportunity alerts separately from news
+
+23. POLITICIAN PROMISE TRACKER
+    - Command: "track [politician name]"
+    - Returns list of promises made vs kept/broken
+      stored in the database
+    - Admin can add/update promise records via 
+      a special admin command
+
+24. DAILY OPINION POLL
+    - Every day at 9AM WAT, bot sends one poll 
+      question to all subscribers as interactive 
+      WhatsApp buttons
+    - Tallies votes and publishes results on 
+      bayelsamedia.com.ng automatically
+    - Command: "poll" to see today's question
+
+25. REPORT A STORY
+    - Command: "report"
+    - Guided flow for citizens to submit news:
+      Step 1: "What happened?"
+      Step 2: "Where exactly?"
+      Step 3: "When did this happen?"
+      Step 4: "Send a photo if you have one"
+    - Saved to database + emailed to newsroom
+
+26. CUSTOM KEYWORD ALERTS
+    - Command: "alert me about [keyword]"
+    - Bot saves keyword for that user's number
+    - Whenever a new NaijaScope article contains 
+      that keyword, bot notifies that user instantly
+    - Command: "my alerts" to see active alerts
+    - Command: "remove alert [keyword]" to delete
+
+27. PREMIUM SUBSCRIPTION TIER
+    - Command: "go premium"
+    - Bot sends Paystack payment link for 
+      ₦500/month premium plan
+    - Premium benefits:
+      ✅ Breaking news 30 mins before public
+      ✅ Exclusive investigations
+      ✅ Ad-free experience
+      ✅ Priority AI responses
+    - Bot verifies payment via Paystack webhook 
+      and upgrades user automatically
+
+PART 6 — ADMIN CONTROLS:
+- Special admin commands only work from the 
+  registered admin number (store in env variable 
+  as ADMIN_NUMBER):
+  "BROADCAST [message]" → sends to all subscribers
+  "BREAKING ON [topic]" → activates live mode
+  "BREAKING OFF" → ends live mode
+  "STATS" → returns subscriber count, 
+             messages today, top commands used
+  "ADD PROMISE [politician] | [promise]" → adds 
+             to promise tracker database
+
+PART 7 — ANALYTICS DASHBOARD DATA:
+- Track and store in database:
+  - Total unique users
+  - Messages per day
+  - Most used commands
+  - Subscriber count
+  - Premium subscriber count
+  - Peak usage hours
+  - Most requested news categories
+
+Build each feature one at a time, test before 
+moving to the next. Do not break existing features.
+Confirm done when all 12 new features are complete.
