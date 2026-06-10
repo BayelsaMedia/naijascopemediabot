@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -35,3 +35,6 @@ externalPort = 80
 
 [userenv.shared]
 VERIFY_TOKEN = "naijascope2026"
+
+[nix]
+channel = "stable-25_05"
