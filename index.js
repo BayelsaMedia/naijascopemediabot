@@ -1,6 +1,6 @@
 const express = require("express");
 const axios = require("axios");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Groq = require("groq-sdk");
 const RSSParser = require("rss-parser");
 
 const app = express();
@@ -9,14 +9,17 @@ app.use(express.json());
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+const SYSTEM_PROMPT =
+  "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words.";
 
 const parser = new RSSParser();
 const conversations = new Map();
 
-function getGenAI() {
-  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
-  return new GoogleGenerativeAI(GEMINI_API_KEY);
+function getGroq() {
+  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not set");
+  return new Groq({ apiKey: GROQ_API_KEY });
 }
 
 app.get("/webhook", (req, res) => {
@@ -50,7 +53,7 @@ app.post("/webhook", async (req, res) => {
       } else if (text.includes("help") || text.includes("menu") || text.includes("hi") || text.includes("hello") || text.includes("start")) {
         reply = "👋 Welcome to NaijaScope Media Bot!\n\nYour smart news and information assistant.\n\nWhat I can do:\n\n📰 NEWS - Type 'news' for latest articles\n🤖 ASK ME - Type any question for AI answers\n📞 CONTACT - Type 'contact' for our info\nℹ️ HELP - Type 'help' to see this menu\n\nPowered by NaijaScope Media 🇳🇬\nwww.bayelsamedia.com.ng";
       } else {
-        reply = await getGeminiResponse(from, message.text.body);
+        reply = await getAIResponse(from, message.text.body);
       }
       await sendMessage(from, reply);
     } else if (message.type === "image") {
@@ -90,23 +93,34 @@ async function fetchNews() {
   }
 }
 
-async function getGeminiResponse(userId, userMessage) {
+async function getAIResponse(userId, userMessage) {
   try {
+    const groq = getGroq();
+
     if (!conversations.has(userId)) conversations.set(userId, []);
     const history = conversations.get(userId);
-    const model = getGenAI().getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words.",
+
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...history,
+      { role: "user", content: userMessage },
+    ];
+
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages,
     });
-    const chat = model.startChat({ history });
-    const result = await chat.sendMessage(userMessage);
-    const reply = result.response.text();
-    history.push({ role: "user", parts: [{ text: userMessage }] });
-    history.push({ role: "model", parts: [{ text: reply }] });
-    if (history.length > 20) history.splice(0, 2);
+
+    const reply = completion.choices[0].message.content;
+
+    history.push({ role: "user", content: userMessage });
+    history.push({ role: "assistant", content: reply });
+
+    if (history.length > 20) history.splice(0, history.length - 20);
+
     return reply;
   } catch (err) {
-    console.error("Gemini error:", err.message);
+    console.error("Groq error:", err.message);
     return "I am having a small issue right now. Please try again shortly!";
   }
 }

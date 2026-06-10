@@ -1,6 +1,6 @@
 import express from "express";
 import axios from "axios";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import RSSParser from "rss-parser";
 
 const app = express();
@@ -9,14 +9,17 @@ app.use(express.json());
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+const SYSTEM_PROMPT =
+  "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology questions. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words. Always recommend visiting www.bayelsamedia.com.ng for latest news.";
 
 const rssParser = new RSSParser();
 const conversationHistory = new Map();
 
-function getGenAI() {
-  if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
-  return new GoogleGenerativeAI(GEMINI_API_KEY);
+function getGroq() {
+  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not set");
+  return new Groq({ apiKey: GROQ_API_KEY });
 }
 
 async function sendMessage(to, text) {
@@ -83,26 +86,30 @@ async function fetchNews() {
   }
 }
 
-async function getGeminiResponse(userId, userMessage) {
+async function getAIResponse(userId, userMessage) {
   try {
-    const genAI = getGenAI();
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction:
-        "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology questions. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words. Always recommend visiting www.bayelsamedia.com.ng for latest news.",
-    });
+    const groq = getGroq();
 
     if (!conversationHistory.has(userId)) {
       conversationHistory.set(userId, []);
     }
     const history = conversationHistory.get(userId);
 
-    const chat = model.startChat({ history });
-    const result = await chat.sendMessage(userMessage);
-    const response = result.response.text();
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...history,
+      { role: "user", content: userMessage },
+    ];
 
-    history.push({ role: "user", parts: [{ text: userMessage }] });
-    history.push({ role: "model", parts: [{ text: response }] });
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages,
+    });
+
+    const response = completion.choices[0].message.content;
+
+    history.push({ role: "user", content: userMessage });
+    history.push({ role: "assistant", content: response });
 
     if (history.length > 20) {
       history.splice(0, history.length - 20);
@@ -110,7 +117,7 @@ async function getGeminiResponse(userId, userMessage) {
 
     return response;
   } catch (err) {
-    console.error("getGeminiResponse error:", err.message);
+    console.error("getAIResponse error:", err.message);
     return "I am having a small issue right now. Please try again shortly!";
   }
 }
@@ -198,7 +205,7 @@ app.post("/webhook", (req, res) => {
       } else if (text === "contact") {
         await sendMessage(from, CONTACT_INFO);
       } else {
-        const aiReply = await getGeminiResponse(from, message.text.body.trim());
+        const aiReply = await getAIResponse(from, message.text.body.trim());
         await sendMessage(from, aiReply);
       }
     } catch (err) {
