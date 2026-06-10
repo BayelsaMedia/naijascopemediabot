@@ -625,30 +625,62 @@ async function handleAdminCommand(from, rawText) {
 }
 
 // ─── WELCOME MENU ──────────────────────────────────────────────────────────────
-async function sendWelcomeMenu(to) {
-  const body = `👋 Hey! NaijaScope Media Bot — Nigeria's smartest news assistant.\n\nWhat do you need?`;
-  await sendInteractiveButtons(to, body, [
-    { id: "btn_news", title: "📰 Top News" },
-    { id: "btn_ask", title: "🤖 Ask AI" },
-    { id: "btn_subscribe", title: "📡 Subscribe" },
-  ]);
+async function sendWelcomeMessage(to) {
+  const data = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: {
+        text: "👋 Welcome to NaijaScope Media Bot!\nNigeria's smartest news assistant 🇳🇬\n\nWhat would you like to do?"
+      },
+      action: {
+        buttons: [
+          {
+            type: "reply",
+            reply: {
+              id: "top_news",
+              title: "📰 Top News"
+            }
+          },
+          {
+            type: "reply",
+            reply: {
+              id: "ask_ai",
+              title: "🤖 Ask AI"
+            }
+          },
+          {
+            type: "reply",
+            reply: {
+              id: "subscribe",
+              title: "📡 Subscribe"
+            }
+          }
+        ]
+      }
+    }
+  };
+
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
+      data,
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+  } catch (err) {
+    console.error("sendWelcomeMessage error:", err?.response?.data || err.message);
+    await sendMessage(to, "👋 Welcome to NaijaScope Media Bot — Nigeria's smartest news assistant 🇳🇬\n\nType: news, help, subscribe, or ask me anything!");
+  }
 }
 
-// ─── ONBOARDING ────────────────────────────────────────────────────────────────
-async function runOnboarding(from, text) {
-  const step = pendingOnboarding.get(from);
-  if (step === "category") {
-    const cats = Object.keys(CATEGORY_KEYWORDS);
-    const category = cats.find(c => text.toLowerCase().includes(c)) || "general";
-    const profile = userProfiles.get(from) || {};
-    userProfiles.set(from, { ...profile, category, onboarded: true });
-    pendingOnboarding.delete(from);
-    knownUsers.add(from);
-    await sendMessage(from, `Sharp sharp! 🎯 I'll keep you on top of ${category} news.\n\nType 'news' for headlines, 'help' for all commands, or just ask me anything. No wahala! 🇳🇬`);
-    return true;
-  }
-  return false;
-}
 
 // ─── TIP FLOW (Feature 18) ────────────────────────────────────────────────────
 async function runTipFlow(from, text, rawText) {
@@ -803,13 +835,13 @@ app.post("/webhook", (req, res) => {
       // ── Interactive replies ──────────────────────────────────────────────
       if (message.type === "interactive") {
         const replyId = message.interactive?.button_reply?.id || message.interactive?.list_reply?.id;
-        if (replyId === "btn_news") {
+        if (replyId === "top_news") {
           track(from, "news");
           const items = await fetchRSSItems();
           await sendNewsItems(from, items.slice(0, 5), "📰 Top stories right now:");
-        } else if (replyId === "btn_ask") {
+        } else if (replyId === "ask_ai") {
           await sendMessage(from, "Ask me anything about Nigeria, Niger Delta, politics, oil or current affairs! 🤖");
-        } else if (replyId === "btn_subscribe") {
+        } else if (replyId === "subscribe") {
           subscribers.add(from);
           track(from, "subscribe");
           await sendMessage(from, "✅ Subscribed! Daily headlines at 7AM WAT + breaking news alerts. Sharp sharp! 📡\n\nType 'unsubscribe' anytime.");
@@ -878,10 +910,6 @@ app.post("/webhook", (req, res) => {
         await runReportFlow(from, rawText);
         return;
       }
-      if (pendingOnboarding.has(from)) {
-        const handled = await runOnboarding(from, rawText);
-        if (handled) return;
-      }
 
       // ── Admin commands ───────────────────────────────────────────────────
       if (isAdmin(from)) {
@@ -898,8 +926,7 @@ app.post("/webhook", (req, res) => {
       // ── First-time user ──────────────────────────────────────────────────
       if (!knownUsers.has(from)) {
         knownUsers.add(from);
-        pendingOnboarding.set(from, "category");
-        await sendMessage(from, "👋 Welcome to NaijaScope Media Bot — Nigeria's smartest news assistant!\n\nWhat news category interests you most?\n\nReply: politics, oil, sports, entertainment, crime, or environment");
+        await sendWelcomeMessage(from);
         return;
       }
 
@@ -911,7 +938,7 @@ app.post("/webhook", (req, res) => {
         await sendNewsItems(from, items.slice(0, 5), "📰 Top stories right now:");
         return;
       }
-      if (text === "help" || text === "menu") { await sendWelcomeMenu(from); return; }
+      if (text === "help" || text === "menu") { await sendWelcomeMessage(from); return; }
       if (text === "contact") {
         await sendMessage(from, "📞 NaijaScope Media:\n\n🌐 www.bayelsamedia.com.ng\n📧 admin@bayelsamedia.com.ng\n\nWe'd love to hear from you! 🇳🇬");
         return;
