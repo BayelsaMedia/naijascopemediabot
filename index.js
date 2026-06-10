@@ -84,7 +84,7 @@ async function getGeminiResponse(userId, userMessage) {
     if (!conversations.has(userId)) conversations.set(userId, []);
     const history = conversations.get(userId);
     const model = getGenAI().getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       systemInstruction: "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words.",
     });
     const chat = model.startChat({ history });

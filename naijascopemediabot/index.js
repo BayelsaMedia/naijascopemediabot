@@ -97,7 +97,7 @@ async function getGeminiResponse(userId, userMessage) {
   try {
     const genAI = getGenAI();
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       systemInstruction:
         "You are NaijaScope Media Bot, a smart assistant for NaijaScope Media, a Nigerian news platform at www.bayelsamedia.com.ng. Help with Nigerian news, politics, entertainment, sports, business and technology questions. Be friendly and concise. Use plain text only, no asterisks or markdown. Keep replies under 250 words. Always recommend visiting www.bayelsamedia.com.ng for latest news.",
     });
