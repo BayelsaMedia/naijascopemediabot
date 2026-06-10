@@ -1,7 +1,8 @@
 import axios from "axios";
 import { logger } from "../utils/logger.js";
+import { withRetry } from "../utils/retry.js";
 
-const BASE_URL = `https://graph.facebook.com/v25.0`;
+const BASE_URL = "https://graph.facebook.com/v25.0";
 const getPhoneId = () => process.env.PHONE_NUMBER_ID;
 const getToken = () => process.env.WHATSAPP_TOKEN;
 
@@ -12,66 +13,83 @@ function headers() {
   };
 }
 
+async function post(payload) {
+  return withRetry(
+    () => axios.post(`${BASE_URL}/${getPhoneId()}/messages`, payload, {
+      headers: headers(),
+      timeout: 10000,
+    }),
+    { attempts: 3, baseDelayMs: 500, label: "WhatsApp API" }
+  );
+}
+
 export async function sendText(to, text) {
+  if (!to || !text) return;
   try {
-    await axios.post(
-      `${BASE_URL}/${getPhoneId()}/messages`,
-      { messaging_product: "whatsapp", to, type: "text", text: { body: text } },
-      { headers: headers() }
-    );
+    await post({
+      messaging_product: "whatsapp",
+      to,
+      type: "text",
+      text: { body: String(text).slice(0, 4096) },
+    });
   } catch (err) {
     logger.error("sendText error:", err?.response?.data || err.message);
   }
 }
 
 export async function sendButtons(to, bodyText, buttons) {
+  if (!to || !bodyText || !buttons?.length) return;
   try {
-    await axios.post(
-      `${BASE_URL}/${getPhoneId()}/messages`,
-      {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: { text: bodyText },
-          action: {
-            buttons: buttons.slice(0, 3).map((b) => ({
-              type: "reply",
-              reply: { id: b.id, title: b.title.slice(0, 20) },
-            })),
-          },
+    await post({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: String(bodyText).slice(0, 1024) },
+        action: {
+          buttons: buttons.slice(0, 3).map((b) => ({
+            type: "reply",
+            reply: {
+              id: String(b.id).slice(0, 256),
+              title: String(b.title).slice(0, 20),
+            },
+          })),
         },
       },
-      { headers: headers() }
-    );
+    });
   } catch (err) {
     logger.error("sendButtons error:", err?.response?.data || err.message);
-    await sendText(to, bodyText + "\n\nType: news, help, subscribe, or ask me anything!");
+    // Graceful fallback to plain text
+    await sendText(to, bodyText + "\n\nReply: news · menu · subscribe · ask me anything");
   }
 }
 
 export async function sendList(to, bodyText, buttonLabel, sections) {
+  if (!to || !bodyText || !sections?.length) return;
   try {
-    await axios.post(
-      `${BASE_URL}/${getPhoneId()}/messages`,
-      {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "interactive",
-        interactive: {
-          type: "list",
-          body: { text: bodyText },
-          action: {
-            button: buttonLabel.slice(0, 20),
-            sections,
-          },
+    await post({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        body: { text: String(bodyText).slice(0, 1024) },
+        action: {
+          button: String(buttonLabel).slice(0, 20),
+          sections: sections.map(s => ({
+            title: String(s.title || "").slice(0, 24),
+            rows: (s.rows || []).slice(0, 10).map(r => ({
+              id: String(r.id).slice(0, 200),
+              title: String(r.title || "").slice(0, 24),
+              description: String(r.description || "").slice(0, 72),
+            })),
+          })),
         },
       },
-      { headers: headers() }
-    );
+    });
   } catch (err) {
     logger.error("sendList error:", err?.response?.data || err.message);
     await sendText(to, bodyText);
@@ -79,21 +97,28 @@ export async function sendList(to, bodyText, buttonLabel, sections) {
 }
 
 export async function markAsRead(messageId) {
+  if (!messageId) return;
   try {
     await axios.post(
       `${BASE_URL}/${getPhoneId()}/messages`,
       { messaging_product: "whatsapp", status: "read", message_id: messageId },
-      { headers: headers() }
+      { headers: headers(), timeout: 5000 }
     );
-  } catch (_) {}
+  } catch (_) { /* silent — not worth surfacing */ }
 }
 
 export async function downloadMedia(mediaId) {
-  const meta = await axios.get(`${BASE_URL}/${mediaId}`, { headers: headers() });
-  const res = await axios.get(meta.data.url, {
-    headers: headers(),
-    responseType: "arraybuffer",
-    timeout: 20000,
-  });
+  const meta = await withRetry(
+    () => axios.get(`${BASE_URL}/${mediaId}`, { headers: headers(), timeout: 10000 }),
+    { attempts: 2, label: "media metadata" }
+  );
+  const res = await withRetry(
+    () => axios.get(meta.data.url, {
+      headers: headers(),
+      responseType: "arraybuffer",
+      timeout: 25000,
+    }),
+    { attempts: 2, label: "media download" }
+  );
   return { buffer: Buffer.from(res.data), mimeType: meta.data.mime_type || "audio/ogg" };
 }

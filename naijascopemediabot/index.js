@@ -16,12 +16,23 @@ import { reverseGeocode, saveUserLocation, fetchLocalNews } from "./src/services
 import { addSubscription, removeSubscription, getSubscribers } from "./src/services/alertService.js";
 import { upsertUser, getUser, query } from "./src/utils/db.js";
 import { logger } from "./src/utils/logger.js";
+import { validateStartup } from "./src/utils/startup.js";
+import { verifyWebhookSignature, sanitizeInput, isValidPhone } from "./src/middleware/security.js";
+import { CircuitBreaker } from "./src/utils/retry.js";
 import { pollData, getPollResults, startDailyPollJob } from "./src/jobs/dailyPoll.js";
 import { startDailyBriefingJob } from "./src/jobs/dailyBriefing.js";
 import { startBreakingNewsMonitor } from "./src/jobs/breakingNewsMonitor.js";
 
 const app = express();
-app.use(express.json());
+
+// Capture raw body for Meta webhook signature verification, then parse JSON
+app.use(express.json({
+  verify: (req, res, buf) => {
+    if (req.path === "/webhook" && req.method === "POST") {
+      verifyWebhookSignature(req, res, buf);
+    }
+  },
+}));
 
 // ─── ENV ───────────────────────────────────────────────────────────────────────
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -78,6 +89,11 @@ const MAX_CONVERSATION_USERS = 500;
 const CACHE_TTL = 10 * 60 * 1000;
 const RATE_LIMIT_MS = 3000;
 
+// Circuit breakers for external APIs
+const rssCircuit = new CircuitBreaker({ name: "RSS Feed", threshold: 4, resetMs: 120000 });
+const oilCircuit = new CircuitBreaker({ name: "Oil Price API", threshold: 3, resetMs: 60000 });
+const fxCircuit = new CircuitBreaker({ name: "Exchange Rate API", threshold: 3, resetMs: 60000 });
+
 // ─── UTILS ─────────────────────────────────────────────────────────────────────
 function getGroq() {
   if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not set");
@@ -129,11 +145,16 @@ async function fetchRSSItems(bypassCache = false) {
     const cached = getCache("rss_all");
     if (cached) return cached;
   }
-  const response = await axios.get("https://www.bayelsamedia.com.ng/feed", { responseType: "text", timeout: 10000 });
-  const xml = sanitizeXml(response.data);
-  const feed = await rssParser.parseString(xml);
-  setCache("rss_all", feed.items);
-  return feed.items;
+  return rssCircuit.call(
+    async () => {
+      const response = await axios.get("https://www.bayelsamedia.com.ng/feed", { responseType: "text", timeout: 10000 });
+      const xml = sanitizeXml(response.data);
+      const feed = await rssParser.parseString(xml);
+      setCache("rss_all", feed.items);
+      return feed.items;
+    },
+    () => getCache("rss_all") || [] // serve stale cache as fallback
+  );
 }
 
 async function getNewsByCategory(category) {
@@ -186,37 +207,39 @@ async function sendNewsItems(to, items, header, userRow) {
 
 // ─── OIL PRICE ────────────────────────────────────────────────────────────────
 async function fetchOilPrice() {
-  try {
-    const cached = getCache("oil_price");
-    if (cached) return cached;
-    const res = await axios.get("https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=1d&range=2d", { timeout: 8000, headers: { "User-Agent": "Mozilla/5.0" } });
-    const meta = res.data.chart.result[0].meta;
-    const price = (meta.regularMarketPrice || 0).toFixed(2);
-    const prev = (meta.chartPreviousClose || meta.regularMarketPrice || 0).toFixed(2);
-    const diff = (price - prev).toFixed(2);
-    const arrow = diff >= 0 ? "📈" : "📉";
-    const msg = `🛢️ Brent Crude: $${price}/barrel ${arrow}\nChange today: ${diff >= 0 ? "+" : ""}${diff}\n\nThe Niger Delta is watching. Want oil sector news?`;
-    setCache("oil_price", msg);
-    return msg;
-  } catch (err) {
-    return "Couldn't grab the oil price — market data dey form 😅\nType 'oil' for oil sector news.";
-  }
+  const cached = getCache("oil_price");
+  if (cached) return cached;
+  return oilCircuit.call(
+    async () => {
+      const res = await axios.get("https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=1d&range=2d", { timeout: 8000, headers: { "User-Agent": "Mozilla/5.0" } });
+      const meta = res.data.chart.result[0].meta;
+      const price = (meta.regularMarketPrice || 0).toFixed(2);
+      const prev = (meta.chartPreviousClose || meta.regularMarketPrice || 0).toFixed(2);
+      const diff = (price - prev).toFixed(2);
+      const arrow = diff >= 0 ? "📈" : "📉";
+      const msg = `🛢️ Brent Crude: $${price}/barrel ${arrow}\nChange today: ${diff >= 0 ? "+" : ""}${diff}\n\nThe Niger Delta is watching. Want oil sector news?`;
+      setCache("oil_price", msg);
+      return msg;
+    },
+    () => getCache("oil_price") || "Couldn't grab the oil price right now — market data dey form 😅\nType 'oil' for oil sector news."
+  );
 }
 
 async function fetchExchangeRate() {
-  try {
-    const cached = getCache("exchange_rate");
-    if (cached) return cached;
-    const res = await axios.get("https://api.exchangerate-api.com/v4/latest/USD", { timeout: 8000 });
-    const ngn = res.data.rates?.NGN;
-    if (!ngn) throw new Error("NGN rate not found");
-    const parallel = Math.round(ngn * 1.08);
-    const msg = `💵 USD/NGN Exchange Rate:\n\n🏦 Market Rate: $1 = ₦${Math.round(ngn)}\n💸 Parallel (est.): $1 = ₦${parallel}\n\nRates fluctuate — visit CBN.gov.ng for official rate.\nAnything else? 👇`;
-    setCache("exchange_rate", msg);
-    return msg;
-  } catch {
-    return "Couldn't fetch the exchange rate right now 😅\nCheck cbn.gov.ng for the official rate.";
-  }
+  const cached = getCache("exchange_rate");
+  if (cached) return cached;
+  return fxCircuit.call(
+    async () => {
+      const res = await axios.get("https://api.exchangerate-api.com/v4/latest/USD", { timeout: 8000 });
+      const ngn = res.data.rates?.NGN;
+      if (!ngn) throw new Error("NGN rate not found");
+      const parallel = Math.round(ngn * 1.08);
+      const msg = `💵 USD/NGN Exchange Rate:\n\n🏦 Market Rate: $1 = ₦${Math.round(ngn)}\n💸 Parallel (est.): $1 = ₦${parallel}\n\nRates fluctuate — visit CBN.gov.ng for official rate.\nAnything else? 👇`;
+      setCache("exchange_rate", msg);
+      return msg;
+    },
+    () => getCache("exchange_rate") || "Couldn't fetch the exchange rate right now 😅\nCheck cbn.gov.ng for the official rate."
+  );
 }
 
 async function fetchWeather(city) {
@@ -672,14 +695,15 @@ app.post("/webhook", (req, res) => {
       if (!message) return;
       const from = message.from;
       const messageId = message.id;
-      if (!from || !messageId) return;
+      if (!from || !messageId || !isValidPhone(from)) return;
       if (!trackMessageId(messageId)) return;
       await markAsRead(messageId);
 
       track(from, null);
       logger.info(`from=${from} type=${message.type}`);
 
-      // Load user from DB
+      // Check existence BEFORE upsert so we can detect first-time users accurately
+      const existingUser = await getUser(from);
       const userRow = await upsertUser(from);
 
       // ── Check if user has open support ticket (bot paused) ────────────────
@@ -773,7 +797,7 @@ app.post("/webhook", (req, res) => {
       }
 
       if (message.type !== "text" || !message.text?.body) return;
-      const rawText = message.text.body.trim();
+      const rawText = sanitizeInput(message.text.body, 2000);
       const text = rawText.toLowerCase();
 
       // ── Active flows ──────────────────────────────────────────────────────
@@ -817,7 +841,7 @@ app.post("/webhook", (req, res) => {
       }
 
       // ── First-time user ───────────────────────────────────────────────────
-      if (!userRow || !userRow.last_seen || (Date.now() - new Date(userRow.created_at).getTime() < 5000)) {
+      if (!existingUser) {
         await sendWelcomeMessage(from);
         return;
       }
@@ -991,9 +1015,38 @@ app.post("/webhook", (req, res) => {
 
 // ─── START ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  logger.info(`NaijaScope Media Bot running on port ${PORT}`);
-  startDailyBriefingJob(fetchRSSItems);
-  startDailyPollJob();
-  startBreakingNewsMonitor(fetchRSSItems);
-});
+
+async function start() {
+  await validateStartup();
+  const server = app.listen(PORT, () => {
+    logger.info(`✅ NaijaScope Media Bot running on port ${PORT}`);
+    startDailyBriefingJob(fetchRSSItems);
+    startDailyPollJob();
+    startBreakingNewsMonitor(fetchRSSItems);
+  });
+
+  // Graceful shutdown — let in-flight requests finish before closing
+  const shutdown = (signal) => {
+    logger.info(`[SHUTDOWN] ${signal} received — shutting down gracefully`);
+    server.close(() => {
+      logger.info("[SHUTDOWN] HTTP server closed");
+      process.exit(0);
+    });
+    // Force exit after 10s if requests don't finish
+    setTimeout(() => {
+      logger.error("[SHUTDOWN] Forced exit after timeout");
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("uncaughtException", (err) => {
+    logger.error("[UNCAUGHT]", err.message, err.stack);
+  });
+  process.on("unhandledRejection", (reason) => {
+    logger.error("[UNHANDLED REJECTION]", reason);
+  });
+}
+
+start();
