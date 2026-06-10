@@ -1,0 +1,612 @@
+Use this exact prompt in Replit AI. It is written to make Replit act like a senior full-stack engineer upgrading your existing NaijaScope WhatsApp bot into a premium AI media assistant.
+
+---
+
+# REPLIT AI PROMPT
+
+You are a senior software architect and full-stack engineer.
+
+Your task is to upgrade my existing NaijaScope WhatsApp bot into a premium AI-powered media assistant without breaking any existing functionality.
+
+The current stack consists of:
+
+* WhatsApp Cloud API (Meta)
+* Node.js backend
+* PostgreSQL database
+* Hosted on Render
+* Developed inside Replit
+* Existing webhook already connected to Meta
+
+Your objective is to professionally refactor and extend the system using production-grade architecture, proper folder organization, reusable services, error handling, logging, and database migrations.
+
+---
+
+## PRIMARY GOAL
+
+Transform NaijaScope into Nigeria's smartest WhatsApp AI newsroom assistant.
+
+The bot should feel like a premium product, not a basic chatbot.
+
+Preserve all existing working features.
+
+Do NOT remove anything that currently functions.
+
+Only improve, optimize, and expand.
+
+---
+
+# PHASE 1 — DATABASE UPGRADES
+
+Create PostgreSQL migrations for the following tables.
+
+### users
+
+Add columns:
+
+```sql
+language_pref VARCHAR(20) DEFAULT 'en',
+subscription_status BOOLEAN DEFAULT false,
+digest_enabled BOOLEAN DEFAULT false,
+breaking_alerts BOOLEAN DEFAULT false,
+favorite_team VARCHAR(100),
+location_state VARCHAR(100),
+location_lga VARCHAR(100),
+last_seen TIMESTAMP,
+resume_context JSONB
+```
+
+---
+
+### saved_articles
+
+```sql
+CREATE TABLE saved_articles (
+    id SERIAL PRIMARY KEY,
+    whatsapp_number VARCHAR(30),
+    article_id VARCHAR(255),
+    article_title TEXT,
+    article_url TEXT,
+    saved_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+### support_tickets
+
+```sql
+CREATE TABLE support_tickets (
+    id SERIAL PRIMARY KEY,
+    reference_code VARCHAR(50) UNIQUE,
+    whatsapp_number VARCHAR(30),
+    issue TEXT,
+    status VARCHAR(20) DEFAULT 'open',
+    created_at TIMESTAMP DEFAULT NOW(),
+    closed_at TIMESTAMP
+);
+```
+
+---
+
+### user_subscriptions
+
+```sql
+CREATE TABLE user_subscriptions (
+    id SERIAL PRIMARY KEY,
+    whatsapp_number VARCHAR(30),
+    subscription_type VARCHAR(50),
+    subscription_value VARCHAR(255),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+# PHASE 2 — WHATSAPP MENU SYSTEM
+
+Replace the existing quick-reply onboarding with WhatsApp List Messages.
+
+The main menu should contain:
+
+1. Top Headlines
+2. Football
+3. Ask AI
+4. Read In My Language
+5. Markets
+6. Subscribe
+7. Fact Check
+8. Talk To A Journalist
+
+Build helper functions:
+
+```javascript
+sendMainMenu()
+sendReturnMenu()
+sendFootballMenu()
+sendLanguageMenu()
+sendSubscriptionMenu()
+```
+
+Menus must be reusable and dynamic.
+
+---
+
+# PHASE 3 — CONTEXTUAL BUTTONS
+
+After news articles:
+
+Show:
+
+```text
+🔖 Save This
+🌍 Translate
+📤 Share
+🔍 More Like This
+🏠 Main Menu
+```
+
+After football interactions:
+
+Show:
+
+```text
+📅 Today's Fixtures
+🏆 League Table
+⚡ Team Alerts
+🏠 Main Menu
+```
+
+---
+
+# PHASE 4 — LANGUAGE SYSTEM REBUILD
+
+Completely refactor language handling.
+
+Requirements:
+
+### Igbo
+
+Use Google Translate API.
+
+Target code:
+
+```text
+ig
+```
+
+---
+
+### Yoruba
+
+Use Google Translate API.
+
+Target code:
+
+```text
+yo
+```
+
+---
+
+### Hausa
+
+Use Google Translate API.
+
+Target code:
+
+```text
+ha
+```
+
+---
+
+### Nigerian Pidgin
+
+Do NOT use Google Translate.
+
+Use Gemini.
+
+Apply this system prompt:
+
+```text
+You ONLY speak Nigerian Pidgin English.
+
+Never use Standard English.
+
+Examples:
+
+Correct:
+"How you dey?"
+"E don happen."
+"Make we go."
+
+Wrong:
+"How are you?"
+"It has happened."
+"Let us go."
+```
+
+---
+
+Implement:
+
+```javascript
+detectLanguageIntent()
+translateArticle()
+saveLanguagePreference()
+applyUserLanguage()
+```
+
+Store language preference permanently in PostgreSQL.
+
+Users should never have to choose twice.
+
+---
+
+# PHASE 5 — SAVE ARTICLES FEATURE
+
+Users should be able to save articles.
+
+Commands:
+
+```text
+Save This
+Show My Saved Articles
+Remove Saved Article
+```
+
+Create:
+
+```javascript
+saveArticle()
+getSavedArticles()
+deleteSavedArticle()
+```
+
+---
+
+# PHASE 6 — DAILY BRIEFING SYSTEM
+
+Create a scheduled task.
+
+Time:
+
+```text
+7:00 AM Nigerian Time
+```
+
+Features:
+
+* Pull top 5 stories.
+* Translate using user's preferred language.
+* Deliver automatically.
+
+Create:
+
+```javascript
+sendDailyBriefings()
+```
+
+Use cron jobs.
+
+Prevent duplicate deliveries.
+
+---
+
+# PHASE 7 — BREAKING NEWS ALERTS
+
+Users can subscribe.
+
+Commands:
+
+```text
+Subscribe to Breaking News
+Unsubscribe
+```
+
+When editors publish urgent stories:
+
+Automatically notify subscribers.
+
+Create:
+
+```javascript
+sendBreakingAlert()
+```
+
+Include rate limiting.
+
+---
+
+# PHASE 8 — FOOTBALL MODULE
+
+Create a dedicated football experience.
+
+Football menu:
+
+```text
+Live Scores
+Today's Fixtures
+NPFL
+Premier League
+Champions League
+Transfer News
+Subscribe To Team Alerts
+```
+
+Integrate:
+
+### football-data.org
+
+For:
+
+* EPL
+* Champions League
+
+---
+
+### API-Football
+
+For:
+
+* NPFL
+* Live scores
+* Fixtures
+* Standings
+
+Create services:
+
+```javascript
+footballService.js
+fixturesService.js
+teamAlertsService.js
+```
+
+Users can subscribe to specific clubs.
+
+Store subscriptions.
+
+When their team scores:
+
+Send WhatsApp notifications automatically.
+
+---
+
+# PHASE 9 — FACT CHECK SERVICE
+
+Users can forward claims.
+
+Workflow:
+
+1. Receive claim.
+2. Search NaijaScope database.
+3. Search trusted sources.
+4. Respond with:
+
+```text
+TRUE
+FALSE
+UNCLEAR
+```
+
+Include confidence explanations.
+
+Create:
+
+```javascript
+factCheckService.js
+verifyClaim()
+```
+
+---
+
+# PHASE 10 — VOICE NOTE SUPPORT
+
+Allow users to send voice notes.
+
+Workflow:
+
+1. Download audio.
+2. Transcribe speech.
+3. Process intent.
+4. Respond naturally.
+
+Create:
+
+```javascript
+voiceService.js
+transcribeAudio()
+processVoiceIntent()
+```
+
+---
+
+# PHASE 11 — HUMAN JOURNALIST HANDOFF
+
+Integrate Chatwoot.
+
+Triggers:
+
+```text
+human
+agent
+talk to journalist
+speak to someone
+editor
+```
+
+Workflow:
+
+1. Create ticket.
+2. Generate reference number.
+
+Format:
+
+```text
+NS-YYYY-XXXX
+```
+
+3. Store in PostgreSQL.
+4. Notify newsroom.
+5. Transfer conversation to Chatwoot.
+6. Silence bot.
+7. Reactivate bot when ticket closes.
+
+Create:
+
+```javascript
+createSupportTicket()
+transferToHuman()
+resumeBot()
+```
+
+---
+
+# PHASE 12 — LOCATION NEWS
+
+Allow users to share location.
+
+Determine:
+
+```text
+State
+LGA
+```
+
+Deliver local news.
+
+Create:
+
+```javascript
+locationService.js
+fetchLocalNews()
+```
+
+Focus especially on:
+
+```text
+Bayelsa
+Rivers
+Niger Delta
+```
+
+---
+
+# PHASE 13 — PROACTIVE RETURN EXPERIENCE
+
+Track user sessions.
+
+If user returns after inactivity:
+
+Send:
+
+```text
+Welcome back 👋
+
+You have new stories waiting.
+```
+
+Show:
+
+```text
+Show New Stories
+Football Update
+Full Menu
+```
+
+Implement:
+
+```javascript
+generateResumeMenu()
+```
+
+---
+
+# PHASE 14 — PROJECT STRUCTURE
+
+Refactor codebase into:
+
+```text
+src/
+    controllers/
+    services/
+    routes/
+    middleware/
+    database/
+    jobs/
+    integrations/
+    utils/
+    prompts/
+    whatsapp/
+```
+
+---
+
+# PHASE 15 — RENDER DEPLOYMENT READINESS
+
+Ensure production readiness.
+
+Requirements:
+
+* Environment variable validation.
+* Retry mechanisms.
+* Centralized logging.
+* Graceful error handling.
+* Webhook response under 5 seconds.
+* Background job processing.
+* Health check endpoint.
+
+Create:
+
+```text
+GET /health
+```
+
+Response:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+---
+
+# PHASE 16 — CODE QUALITY
+
+Requirements:
+
+* Type-safe JSDoc comments.
+* Modular services.
+* No duplicate code.
+* Async/await everywhere.
+* Comprehensive error handling.
+* Clear naming conventions.
+* Maintainability over shortcuts.
+
+---
+
+# FINAL OUTPUT REQUIRED
+
+Replit AI must:
+
+1. Analyze the existing codebase.
+2. Preserve all current functionality.
+3. Implement every phase above.
+4. Generate migration scripts.
+5. Generate new service files.
+6. Update webhook handlers.
+7. Update Render deployment configuration.
+8. Explain every change made.
+9. Flag anything requiring API keys.
+10. Produce deployment instructions.
+11. Produce testing instructions.
+12. Produce a checklist confirming all features work before deployment.
+
+Do not provide pseudocode.
+
+Modify the actual project files directly.
+
+Act as a senior production engineer building a scalable Nigerian AI newsroom platform.
+
+NaijaScope should feel like a premium media company powered by AI, not a basic WhatsApp chatbot.
