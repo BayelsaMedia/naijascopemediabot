@@ -56,9 +56,20 @@ async function markAsRead(messageId) {
   }
 }
 
+function sanitizeXml(raw) {
+  return raw
+    .replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\uFFFE\uFFFF]/g, "");
+}
+
 async function fetchNews() {
   try {
-    const feed = await rssParser.parseURL("https://www.bayelsamedia.com.ng/feed");
+    const response = await axios.get("https://www.bayelsamedia.com.ng/feed", {
+      responseType: "text",
+      timeout: 10000,
+    });
+    const xml = sanitizeXml(response.data);
+    const feed = await rssParser.parseString(xml);
     const items = feed.items.slice(0, 5);
     let msg = "📰 Latest from NaijaScope Media:\n\n";
     items.forEach((item, i) => {
