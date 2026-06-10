@@ -416,7 +416,6 @@ async function getAIResponse(userId, userMessage) {
     }
     const history = conversationHistory.get(userId);
     let sys = isPidgin ? SYSTEM_PROMPT_PIDGIN : SYSTEM_PROMPT;
-    if (profile?.name) sys += ` The user's name is ${profile.name}.`;
     if (profile?.category) sys += ` They prefer ${profile.category} news.`;
     if (premiumUsers.has(userId)) sys += " This is a premium user — give them priority detailed responses.";
     const messages = [{ role: "system", content: sys }, ...history, { role: "user", content: userMessage }];
@@ -627,9 +626,7 @@ async function handleAdminCommand(from, rawText) {
 
 // ─── WELCOME MENU ──────────────────────────────────────────────────────────────
 async function sendWelcomeMenu(to) {
-  const profile = userProfiles.get(to);
-  const name = profile?.name ? `, ${profile.name}` : "";
-  const body = `👋 Hey${name}! NaijaScope Media Bot — Nigeria's smartest news assistant.\n\nWhat do you need?`;
+  const body = `👋 Hey! NaijaScope Media Bot — Nigeria's smartest news assistant.\n\nWhat do you need?`;
   await sendInteractiveButtons(to, body, [
     { id: "btn_news", title: "📰 Top News" },
     { id: "btn_ask", title: "🤖 Ask AI" },
@@ -640,13 +637,6 @@ async function sendWelcomeMenu(to) {
 // ─── ONBOARDING ────────────────────────────────────────────────────────────────
 async function runOnboarding(from, text) {
   const step = pendingOnboarding.get(from);
-  if (step === "name") {
-    const name = text.trim().split(/\s+/)[0];
-    userProfiles.set(from, { name, onboarded: false });
-    pendingOnboarding.set(from, "category");
-    await sendMessage(from, `Nice to meet you, ${name}! 🙌\n\nWhat news category interests you most?\n\nReply: politics, oil, sports, entertainment, crime, or environment`);
-    return true;
-  }
   if (step === "category") {
     const cats = Object.keys(CATEGORY_KEYWORDS);
     const category = cats.find(c => text.toLowerCase().includes(c)) || "general";
@@ -654,7 +644,7 @@ async function runOnboarding(from, text) {
     userProfiles.set(from, { ...profile, category, onboarded: true });
     pendingOnboarding.delete(from);
     knownUsers.add(from);
-    await sendMessage(from, `Sharp sharp, ${profile.name || "Chief"}! 🎯 I'll keep you on top of ${category} news.\n\nType 'news' for headlines, 'help' for all commands, or just ask me anything. No wahala! 🇳🇬`);
+    await sendMessage(from, `Sharp sharp! 🎯 I'll keep you on top of ${category} news.\n\nType 'news' for headlines, 'help' for all commands, or just ask me anything. No wahala! 🇳🇬`);
     return true;
   }
   return false;
@@ -908,8 +898,8 @@ app.post("/webhook", (req, res) => {
       // ── First-time user ──────────────────────────────────────────────────
       if (!knownUsers.has(from)) {
         knownUsers.add(from);
-        pendingOnboarding.set(from, "name");
-        await sendMessage(from, "👋 Welcome to NaijaScope Media Bot — Nigeria's smartest news assistant!\n\nFirst things first — what's your name?");
+        pendingOnboarding.set(from, "category");
+        await sendMessage(from, "👋 Welcome to NaijaScope Media Bot — Nigeria's smartest news assistant!\n\nWhat news category interests you most?\n\nReply: politics, oil, sports, entertainment, crime, or environment");
         return;
       }
 
