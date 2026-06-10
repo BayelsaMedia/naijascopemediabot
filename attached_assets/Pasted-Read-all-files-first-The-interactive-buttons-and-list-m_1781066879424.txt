@@ -1,0 +1,99 @@
+Read all files first.
+
+The interactive buttons and list messages are displaying 
+as plain text instead of real WhatsApp tap buttons. 
+This means the code is sending wrong message types.
+
+Fix ALL interactive messages using the EXACT WhatsApp 
+Cloud API format below:
+
+BUTTON MESSAGE FORMAT (max 3 buttons):
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": PHONE_NUMBER,
+  "type": "interactive",
+  "interactive": {
+    "type": "button",
+    "body": {
+      "text": "Your message text here"
+    },
+    "action": {
+      "buttons": [
+        {
+          "type": "reply",
+          "reply": {
+            "id": "unique_id_1",
+            "title": "📰 Top News"
+          }
+        },
+        {
+          "type": "reply",
+          "reply": {
+            "id": "unique_id_2",
+            "title": "🤖 Ask AI"
+          }
+        },
+        {
+          "type": "reply",
+          "reply": {
+            "id": "unique_id_3",
+            "title": "📡 Subscribe"
+          }
+        }
+      ]
+    }
+  }
+}
+
+LIST MESSAGE FORMAT (for news results):
+{
+  "messaging_product": "whatsapp",
+  "recipient_type": "individual",
+  "to": PHONE_NUMBER,
+  "type": "interactive",
+  "interactive": {
+    "type": "list",
+    "body": {
+      "text": "Latest from NaijaScope 📰"
+    },
+    "action": {
+      "button": "View Stories",
+      "sections": [
+        {
+          "title": "Top Stories",
+          "rows": [
+            {
+              "id": "story_1",
+              "title": "Headline title here",
+              "description": "Category • Read more →"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+Apply this correct format to:
+1. Welcome message → button message with 
+   [📰 Top News] [🤖 Ask AI] [📡 Subscribe]
+2. News results → list message with headlines
+3. Category selection → button message
+4. All other menus → appropriate button or 
+   list format
+
+Also handle the button REPLY correctly — when 
+user taps a button, WhatsApp sends back the 
+button ID in interactive.button_reply.id 
+(not as a text message). Make sure the 
+message handler checks for this properly:
+if (message.type === 'interactive') {
+  const buttonId = 
+  message.interactive.button_reply?.id ||
+  message.interactive.list_reply?.id
+}
+
+Do not change any other logic. Only fix the 
+message format to use proper interactive types.
+Test after each change. Confirm done.

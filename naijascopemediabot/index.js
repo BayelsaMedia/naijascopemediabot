@@ -141,10 +141,19 @@ async function sendInteractiveButtons(to, bodyText, buttons) {
     await axios.post(
       `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
       {
-        messaging_product: "whatsapp", to, type: "interactive",
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "interactive",
         interactive: {
-          type: "button", body: { text: bodyText },
-          action: { buttons: buttons.map(b => ({ type: "reply", reply: { id: b.id, title: b.title.slice(0, 20) } })) },
+          type: "button",
+          body: { text: bodyText },
+          action: {
+            buttons: buttons.map(b => ({
+              type: "reply",
+              reply: { id: b.id, title: b.title.slice(0, 20) },
+            })),
+          },
         },
       },
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
@@ -160,10 +169,17 @@ async function sendListMessage(to, bodyText, buttonLabel, sections) {
     await axios.post(
       `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
       {
-        messaging_product: "whatsapp", to, type: "interactive",
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "interactive",
         interactive: {
-          type: "list", body: { text: bodyText },
-          action: { button: buttonLabel.slice(0, 20), sections },
+          type: "list",
+          body: { text: bodyText },
+          action: {
+            button: buttonLabel.slice(0, 20),
+            sections,
+          },
         },
       },
       { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } }
