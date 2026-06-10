@@ -1,0 +1,142 @@
+Read all files first. Study every single file in this 
+project thoroughly before touching anything.
+
+LOCKED COMPONENTS — do NOT touch:
+- Webhook verification logic
+- Environment variable names
+- Render deployment configuration
+- GitHub push logic
+
+To unlock the full bot upgrade, use phrase: 
+NAIJABOT-ELITE-UPGRADE-2026
+
+---
+
+NAIJABOT-ELITE-UPGRADE-2026
+
+You are a senior WhatsApp bot architect who has built 
+bots for BBC Africa, CNN International and Bloomberg. 
+Upgrade the NaijaScope Media Bot to the highest possible 
+standard using the WhatsApp Cloud API. Here is everything 
+to implement:
+
+PART 1 — RESPONSE STYLE & PERSONALITY:
+- Responses must ALWAYS be short, sharp and punchy. 
+  Maximum 4 lines per response unless user asks for 
+  detail. Never send walls of text.
+- The bot must feel like a real smart person texting — 
+  not a robot reading from a script.
+- Tone: confident, warm, Nigerian, intelligent. 
+  Occasionally use Nigerian expressions naturally 
+  e.g. "No wahala", "Sharp sharp", "E don happen".
+- Never repeat the welcome menu unless user types 
+  "help" or "menu".
+- Never say "I am having a small issue". Instead say 
+  something intelligent like "Hmm, let me think on 
+  that — try again in a sec 🤔"
+- Always end responses with a smart follow-up question 
+  or a call to action where relevant.
+
+PART 2 — INTERACTIVE UI (WhatsApp Buttons & Lists):
+- Replace all plain text menus with WhatsApp interactive 
+  LIST MESSAGES and BUTTON MESSAGES using the Cloud API.
+- Welcome message must use interactive buttons:
+  [📰 Top News] [🤖 Ask AI] [📡 Subscribe]
+- News results must use list messages showing 
+  headline + category + "Read more →" link per item.
+- All category navigation must use interactive buttons.
+
+PART 3 — SMART FEATURES TO BUILD:
+
+1. DAILY NEWS DIGEST SUBSCRIPTION
+   - User types "subscribe" → bot saves their number
+   - Every morning at 7AM WAT, bot sends top 5 
+     NaijaScope headlines automatically
+   - User types "unsubscribe" to stop
+
+2. NEWS BY CATEGORY
+   - Commands: "politics", "oil", "crime", 
+     "environment", "sports", "entertainment"
+   - Returns latest 3 headlines from that category 
+     with article links
+
+3. TRENDING NOW
+   - Command: "trending"
+   - Returns the 3 most viewed stories today
+
+4. NIGERIAN PIDGIN MODE
+   - Command: "pidgin on" / "pidgin off"
+   - Bot switches to responding in Nigerian Pidgin 
+     English when pidgin mode is on
+
+5. LIVE OIL PRICE
+   - Command: "oil price"
+   - Fetches and returns live Brent crude price 
+     with daily change
+
+6. ASK NAIJA
+   - Any question about Nigeria, Niger Delta, 
+     politics, oil, NDDC, Bayelsa → bot answers 
+     with high intelligence using Groq
+   - Bot must know it is the smartest Nigerian 
+     news assistant alive
+
+7. FACT CHECK
+   - Command: "fact check [claim]"
+   - Bot uses Groq to analyze and respond with 
+     TRUE / FALSE / UNVERIFIED + explanation
+
+8. BREAKING NEWS ALERT SYSTEM
+   - When a new article is published on 
+     bayelsamedia.com.ng, automatically push alert 
+     to all subscribed users with headline + link
+
+9. WEATHER
+   - Command: "weather [city]"
+   - Returns current weather for any Nigerian city
+
+10. SAVE & BOOKMARK
+    - User can reply "save" to any news story
+    - Command: "saved" shows their bookmarked stories
+
+11. SHARE STORY
+    - Every news result includes a pre-formatted 
+      shareable message the user can forward
+
+12. 2027 ELECTION TRACKER
+    - Command: "election"
+    - Returns latest 2027 election news and 
+      candidate updates from NaijaScope
+
+13. NDDC TRACKER
+    - Command: "nddc"
+    - Returns latest NDDC accountability news 
+      and budget updates
+
+14. SMART CONVERSATION MEMORY
+    - Remember last 10 messages per user session
+    - Use context to give better follow-up answers
+
+15. USER ONBOARDING FLOW
+    - First time a new number messages the bot, 
+      ask their name and preferred news category
+    - Personalize all future responses using 
+      their name and preference
+
+PART 4 — ERROR HANDLING:
+- Every function must have try/catch
+- All errors must be logged clearly
+- Bot must NEVER crash — if one feature fails, 
+  the rest must keep working
+- Rate limit Groq calls to max 1 per 3 seconds 
+  per user to prevent quota exhaustion
+
+PART 5 — PERFORMANCE:
+- Add response caching — if same news request 
+  was made in last 10 minutes, return cached result
+- Compress all outgoing messages for speed
+- Log every user interaction with timestamp 
+  to the database for analytics
+
+Build everything now. Test each feature before 
+moving to the next. Confirm done when complete.
