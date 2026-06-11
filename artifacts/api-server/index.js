@@ -229,11 +229,18 @@ async function fetchRSSItems(bypassCache = false) {
     const cached = getCache("rss_all");
     if (cached) return cached;
   }
-  const response = await axios.get("https://www.bayelsamedia.com.ng/feed", { responseType: "text", timeout: 10000 });
-  const xml = sanitizeXml(response.data);
-  const feed = await rssParser.parseString(xml);
-  setCache("rss_all", feed.items);
-  return feed.items;
+  try {
+    const response = await axios.get("https://www.bayelsamedia.com.ng/feed", { responseType: "text", timeout: 10000 });
+    const xml = sanitizeXml(response.data);
+    const feed = await rssParser.parseString(xml);
+    setCache("rss_all", feed.items);
+    return feed.items;
+  } catch (err) {
+    console.error("fetchRSSItems error:", err.message);
+    const cached = getCache("rss_all");
+    if (cached) return cached;
+    return [];
+  }
 }
 
 async function getNewsByCategory(category) {
@@ -447,11 +454,11 @@ async function sendPollToSubscribers() {
   pollData.date = today; pollData.question = poll.question; pollData.options = poll.options; pollData.votes = new Map();
   for (const number of subscribers) {
     try {
-      await sendInteractiveButtons(number, `📊 NaijaScope Daily Poll:\n\n${poll.question}`, [
-        { id: "poll_0", title: poll.options[0] },
-        { id: "poll_1", title: poll.options[1] },
-        { id: "poll_2", title: poll.options[2] },
-      ]);
+      const pollButtons = poll.options
+        .slice(0, 3)
+        .filter(opt => opt != null)
+        .map((opt, i) => ({ id: `poll_${i}`, title: opt }));
+      await sendInteractiveButtons(number, `📊 NaijaScope Daily Poll:\n\n${poll.question}`, pollButtons);
       await new Promise(r => setTimeout(r, 800));
     } catch (err) { console.error("[POLL] send error:", err.message); }
   }
@@ -558,6 +565,7 @@ async function handleAdminCommand(from, rawText) {
     await sendMessage(from, `✅ Updated: "${promises[idx].promise}" → ${newStatus}`);
     return;
   }
+  await sendMessage(from, "Unknown admin command. Commands: BROADCAST, BREAKING ON/OFF, LIVE, STATS, ADD PROMISE, UPDATE PROMISE.");
 }
 
 // ─── WELCOME MENU ──────────────────────────────────────────────────────────────
