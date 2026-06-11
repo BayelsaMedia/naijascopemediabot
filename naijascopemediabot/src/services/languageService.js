@@ -1,5 +1,5 @@
 import axios from "axios";
-import Groq from "groq-sdk";
+import { getGroq } from "./aiService.js";
 import { upsertUser } from "../utils/db.js";
 import { logger } from "../utils/logger.js";
 import { PROMPT_PIDGIN_TRANSLATE, LANG_NAMES } from "../prompts/systemPrompts.js";
@@ -8,11 +8,11 @@ const GOOGLE_TRANSLATE_URL = "https://translation.googleapis.com/language/transl
 
 export function detectLanguageIntent(text) {
   const t = text.toLowerCase().trim();
-  if (t.includes("igbo") || t === "ig") return "ig";
-  if (t.includes("yoruba") || t === "yo") return "yo";
-  if (t.includes("hausa") || t === "ha") return "ha";
+  if (t.includes("igbo")   || t === "ig")     return "ig";
+  if (t.includes("yoruba") || t === "yo")     return "yo";
+  if (t.includes("hausa")  || t === "ha")     return "ha";
   if (t.includes("pidgin") || t === "pidgin") return "pidgin";
-  if (t.includes("english") || t === "en") return "en";
+  if (t.includes("english")|| t === "en")     return "en";
   return null;
 }
 
@@ -26,7 +26,7 @@ export async function translateWithGoogle(text, targetLang) {
     const res = await axios.post(
       `${GOOGLE_TRANSLATE_URL}?key=${apiKey}`,
       { q: text, target: targetLang, format: "text" },
-      { timeout: 8000 }
+      { timeout: 8_000 }
     );
     return res.data?.data?.translations?.[0]?.translatedText || null;
   } catch (err) {
@@ -37,12 +37,12 @@ export async function translateWithGoogle(text, targetLang) {
 
 export async function translateWithPidgin(text) {
   try {
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const groq = getGroq();
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [
         { role: "system", content: PROMPT_PIDGIN_TRANSLATE },
-        { role: "user", content: text },
+        { role: "user",   content: text },
       ],
       max_tokens: 400,
     });

@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import Groq from "groq-sdk";
+import { getGroq } from "../services/aiService.js";
 import { getSubscribers } from "../services/alertService.js";
 import { sendButtons } from "../services/whatsappService.js";
 import { logger } from "../utils/logger.js";
@@ -8,7 +8,7 @@ export const pollData = { date: null, question: "", options: [], votes: new Map(
 
 async function generatePoll() {
   try {
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const groq = getGroq();
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [{
@@ -17,13 +17,13 @@ async function generatePoll() {
       }],
       max_tokens: 150,
     });
-    const raw = completion.choices[0].message.content.trim();
+    const raw  = completion.choices[0].message.content.trim();
     const json = JSON.parse(raw.replace(/```json?|```/g, "").trim());
     return { question: json.question, options: json.options.slice(0, 3) };
   } catch (err) {
     logger.error("generatePoll error:", err.message);
     return {
-      question: "How do you rate the current government's handling of oil revenue in Bayelsa?",
+      question: "How do you rate the government's handling of oil revenue in Bayelsa?",
       options: ["Excellent", "Average", "Poor"],
     };
   }
@@ -36,11 +36,11 @@ export async function sendDailyPoll() {
   const subscribers = await getSubscribers("daily_digest");
   if (subscribers.length === 0) return;
 
-  const poll = await generatePoll();
-  pollData.date = today;
+  const poll     = await generatePoll();
+  pollData.date  = today;
   pollData.question = poll.question;
-  pollData.options = poll.options;
-  pollData.votes = new Map();
+  pollData.options  = poll.options;
+  pollData.votes    = new Map();
 
   logger.info(`[POLL] Sending to ${subscribers.length} subscribers`);
   for (const number of subscribers) {
@@ -68,7 +68,7 @@ export function startDailyPollJob() {
 export function getPollResults() {
   if (!pollData.question) return "No poll active today. Check back tomorrow! 📊";
   const total = pollData.votes.size;
-  if (total === 0) return `📊 Today's Poll:\n\n${pollData.question}\n\nNo votes yet — be the first!`;
+  if (total === 0) return `📊 Today's Poll:\n\n${pollData.question}\n\nNo votes yet — be the first to weigh in!`;
   const counts = [0, 0, 0];
   for (const v of pollData.votes.values()) counts[v]++;
   const lines = pollData.options.map((opt, i) => {

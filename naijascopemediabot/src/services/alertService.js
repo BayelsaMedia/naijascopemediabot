@@ -1,6 +1,8 @@
 import { query } from "../utils/db.js";
-import { sendText, sendButtons } from "./whatsappService.js";
+import { sendText } from "./whatsappService.js";
+import { addUserAlert } from "../state/sessionState.js";
 import { logger } from "../utils/logger.js";
+import { SITE_URL } from "../config/constants.js";
 
 export async function getSubscribers(type) {
   const res = await query(
@@ -18,7 +20,7 @@ export async function addSubscription(whatsappNumber, type, value = type) {
     [whatsappNumber, type, value]
   );
   await query(
-    `UPDATE users SET subscription_status = true WHERE whatsapp_number = $1`,
+    "UPDATE users SET subscription_status = true WHERE whatsapp_number = $1",
     [whatsappNumber]
   );
 }
@@ -30,8 +32,25 @@ export async function removeSubscription(whatsappNumber, type) {
   );
 }
 
+// ── Keyword alerts ─────────────────────────────────────────────────────────────
+export async function persistKeywordAlert(whatsappNumber, keyword) {
+  await query(
+    `INSERT INTO user_keyword_alerts (whatsapp_number, keyword)
+     VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [whatsappNumber, keyword.toLowerCase()]
+  );
+  addUserAlert(whatsappNumber, keyword);
+}
+
+export async function getAllKeywordAlerts() {
+  const res = await query("SELECT whatsapp_number, keyword FROM user_keyword_alerts");
+  return res.rows;
+}
+
+// ── Breaking alert broadcast ───────────────────────────────────────────────────
 export async function sendBreakingAlert(item, subscribers) {
-  const msg = `🔴 BREAKING: ${item.title}\n🔗 ${item.link}\n\nNaijaScope Media | www.bayelsamedia.com.ng`;
+  const msg = `🔴 BREAKING: ${item.title}\n🔗 ${item.link}\n\nNaijaScope Media | ${SITE_URL}`;
   let sent = 0;
   for (const number of subscribers) {
     try {

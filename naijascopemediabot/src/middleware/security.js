@@ -2,15 +2,16 @@ import crypto from "crypto";
 
 /**
  * Verify Meta's HMAC-SHA256 webhook signature.
- * Meta signs every payload with the app secret — reject anything unsigned.
+ * Rejects requests with missing or mismatched signatures.
+ * If WHATSAPP_APP_SECRET is unset (dev mode), verification is skipped.
  */
 export function verifyWebhookSignature(req, res, buf) {
-  const sig = req.headers["x-hub-signature-256"];
   const secret = process.env.WHATSAPP_APP_SECRET;
+  if (!secret) return; // dev mode — skip
 
-  if (!secret) return; // skip if not configured (dev mode)
+  const sig = req.headers["x-hub-signature-256"];
   if (!sig) {
-    res.status(401).json({ error: "Missing signature" });
+    res.status(401).json({ error: "Missing X-Hub-Signature-256 header" });
     throw new Error("Missing X-Hub-Signature-256");
   }
 
@@ -19,17 +20,25 @@ export function verifyWebhookSignature(req, res, buf) {
     .update(buf)
     .digest("hex");
 
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
-    res.status(401).json({ error: "Invalid signature" });
+  // timingSafeEqual requires equal-length buffers — guard explicitly
+  const sigBuf      = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+
+  if (
+    sigBuf.length !== expectedBuf.length ||
+    !crypto.timingSafeEqual(sigBuf, expectedBuf)
+  ) {
+    res.status(401).json({ error: "Invalid webhook signature" });
     throw new Error("Webhook signature mismatch");
   }
 }
 
 /**
- * Sanitize a user text input — strip control chars, truncate to safe length.
- * Does NOT HTML-encode (WhatsApp is not a browser context).
+ * Sanitize user text input.
+ * Strips control characters and truncates to a safe length.
+ * WhatsApp is not a browser context — HTML-encoding is not applied.
  */
-export function sanitizeInput(text, maxLength = 1000) {
+export function sanitizeInput(text, maxLength = 1_000) {
   if (typeof text !== "string") return "";
   return text
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
@@ -38,7 +47,7 @@ export function sanitizeInput(text, maxLength = 1000) {
 }
 
 /**
- * Validate a WhatsApp phone number — digits only, 10-15 chars.
+ * Validate a WhatsApp phone number — digits only, 10–15 characters.
  */
 export function isValidPhone(number) {
   return /^\d{10,15}$/.test(number);

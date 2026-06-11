@@ -1,29 +1,31 @@
 import pkg from "pg";
+import { logger } from "./logger.js";
 const { Pool } = pkg;
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionString:     process.env.DATABASE_URL,
+  max:                  10,
+  idleTimeoutMillis:    30_000,
+  connectionTimeoutMillis: 5_000,
 });
 
 pool.on("error", (err) => {
-  console.error("[DB] Unexpected pool error:", err.message);
+  logger.error("[DB] Unexpected pool error:", err.message);
 });
 
 export async function query(sql, params = []) {
-  const client = await pool.connect();
-  try {
-    return await client.query(sql, params);
-  } finally {
-    client.release();
-  }
+  return pool.query(sql, params);
 }
 
-/** Returns the user row or null — does NOT create the user. */
+const ALLOWED_USER_FIELDS = [
+  "language_pref", "subscription_status", "digest_enabled",
+  "breaking_alerts", "favorite_team", "location_state",
+  "location_lga", "resume_context",
+];
+
+/** Returns the user row or null without creating the user. */
 export async function getUser(whatsappNumber) {
-  const res = await query(
+  const res = await pool.query(
     "SELECT * FROM users WHERE whatsapp_number = $1",
     [whatsappNumber]
   );
@@ -31,41 +33,30 @@ export async function getUser(whatsappNumber) {
 }
 
 /**
- * Create user if not exists, then optionally update fields and touch last_seen.
- * Returns the updated user row.
+ * Upsert user: create if new, always touch last_seen, optionally update fields.
+ * Returns the updated row. Single query via ON CONFLICT DO UPDATE.
  */
 export async function upsertUser(whatsappNumber, fields = {}) {
-  await query(
-    `INSERT INTO users (whatsapp_number, last_seen)
-     VALUES ($1, NOW())
-     ON CONFLICT (whatsapp_number) DO NOTHING`,
-    [whatsappNumber]
+  const filtered = Object.fromEntries(
+    Object.entries(fields).filter(([k]) => ALLOWED_USER_FIELDS.includes(k))
   );
+  const fieldKeys   = Object.keys(filtered);
+  const fieldValues = Object.values(filtered);
 
-  if (Object.keys(fields).length > 0) {
-    const allowed = [
-      "language_pref", "subscription_status", "digest_enabled",
-      "breaking_alerts", "favorite_team", "location_state",
-      "location_lga", "last_seen", "resume_context",
-    ];
-    const filtered = Object.fromEntries(
-      Object.entries(fields).filter(([k]) => allowed.includes(k))
-    );
-    if (Object.keys(filtered).length > 0) {
-      const sets = Object.keys(filtered).map((k, i) => `${k} = $${i + 2}`).join(", ");
-      await query(
-        `UPDATE users SET ${sets}, last_seen = NOW() WHERE whatsapp_number = $1`,
-        [whatsappNumber, ...Object.values(filtered)]
-      );
-    }
-  } else {
-    await query(
-      "UPDATE users SET last_seen = NOW() WHERE whatsapp_number = $1",
-      [whatsappNumber]
-    );
+  let conflictSets = "last_seen = NOW()";
+  if (fieldKeys.length > 0) {
+    const sets = fieldKeys.map((k, i) => `${k} = $${i + 2}`).join(", ");
+    conflictSets = `${sets}, last_seen = NOW()`;
   }
 
-  return getUser(whatsappNumber);
+  const res = await pool.query(
+    `INSERT INTO users (whatsapp_number, last_seen)
+     VALUES ($1, NOW())
+     ON CONFLICT (whatsapp_number) DO UPDATE SET ${conflictSets}
+     RETURNING *`,
+    [whatsappNumber, ...fieldValues]
+  );
+  return res.rows[0];
 }
 
 export default pool;
