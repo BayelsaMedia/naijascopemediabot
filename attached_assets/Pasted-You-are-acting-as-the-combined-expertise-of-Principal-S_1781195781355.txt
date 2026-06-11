@@ -1,0 +1,444 @@
+You are acting as the combined expertise of:
+
+* Principal Software Architect
+* Distinguished Backend Engineer
+* Staff AI Engineer
+* Senior Conversational UX Designer
+* Senior Product Designer
+* Senior DevOps Engineer
+* Senior Security Engineer
+* Principal Site Reliability Engineer
+* Head of Engineering at a premium global technology company.
+
+You are responsible for evolving NaijaScope into Africa's most sophisticated AI-powered newsroom experience on WhatsApp.
+
+IMPORTANT:
+
+NaijaScope is NOT a simple chatbot.
+
+NaijaScope is a premium media technology platform preparing for national scale across Nigeria and eventual expansion across Africa.
+
+Your task is NOT to add random features.
+
+Your task is to review the entire implementation and elevate every aspect of the experience to world-class standards while preserving all existing functionality.
+
+DO NOT introduce breaking changes.
+
+DO NOT remove existing capabilities.
+
+Refactor, optimize, harden, and elevate.
+
+The resulting system should feel expensive, intentional, intelligent, reliable, and premium.
+
+---
+
+CURRENT FEATURES THAT MUST REMAIN FULLY FUNCTIONAL
+
+MAIN EXPERIENCE
+
+* Interactive WhatsApp menus.
+* Welcome experience.
+* Returning-user experience.
+* Dynamic menus.
+* Human journalist handoff.
+* Admin broadcasts.
+* Breaking News LIVE mode.
+
+NEWS FEATURES
+
+* Daily Briefing subscriptions.
+* Breaking News subscriptions.
+* Opportunities subscriptions.
+* Custom keyword alerts.
+* Breaking News RSS monitoring.
+* Manual newsroom alerts.
+* Category browsing.
+* Trending stories.
+* Weather updates.
+* Flood alerts.
+* Markets.
+* Oil prices.
+* Exchange rates.
+
+AI FEATURES
+
+* Conversational AI assistant.
+* Context memory per user.
+* Voice transcription.
+* Voice intent routing.
+* Image fact checking.
+* Text claim verification.
+* Multilingual support.
+
+COMMUNITY FEATURES
+
+* Anonymous tips.
+* Citizen reporting.
+* Promise tracker.
+* Daily polls.
+* Journalist escalation.
+
+ADMIN FEATURES
+
+* Broadcast system.
+* Subscriber management.
+* Live breaking newsroom mode.
+* Ticket management.
+* Operational statistics.
+
+ALL OF THESE MUST CONTINUE WORKING.
+
+---
+
+PHASE 1:
+COMPLETE ENGINEERING AUDIT
+
+Review the entire codebase and identify:
+
+* architectural weaknesses,
+* maintainability concerns,
+* duplicated logic,
+* technical debt,
+* reliability risks,
+* security vulnerabilities,
+* performance bottlenecks,
+* scalability limitations,
+* testing gaps,
+* deployment weaknesses.
+
+Produce a detailed audit report.
+
+---
+
+PHASE 2:
+PREMIUM WHATSAPP PRODUCT EXPERIENCE
+
+The NaijaScope experience should feel unlike any existing WhatsApp bot.
+
+Design every interaction as though it were built by a top-tier consumer technology company.
+
+Requirements:
+
+* Eliminate robotic interactions.
+* Reduce friction everywhere.
+* Minimize unnecessary messages.
+* Improve clarity.
+* Improve emotional intelligence.
+* Improve information hierarchy.
+* Maintain professionalism.
+
+Every message should feel:
+
+* premium,
+* intelligent,
+* trustworthy,
+* warm,
+* concise,
+* newsroom-grade.
+
+---
+
+ADVANCED CONVERSATIONAL DESIGN
+
+Move beyond simple buttons.
+
+Leverage the maximum capabilities of WhatsApp Business APIs.
+
+Introduce sophisticated interaction patterns including:
+
+* multi-step interactive journeys,
+* contextual quick replies,
+* adaptive menus,
+* personalized shortcuts,
+* recently used actions,
+* predictive suggestions,
+* follow-up recommendations,
+* carousel-like list experiences,
+* "continue where you left off" flows,
+* smart resurfacing of unfinished actions,
+* progressive disclosure of complexity.
+
+Menus should adapt based on:
+
+* subscription history,
+* reading preferences,
+* location,
+* engagement patterns,
+* favorite football clubs,
+* previous searches,
+* language preference,
+* time of day.
+
+Examples:
+
+A football-heavy user should see Football first.
+
+A politics-heavy user should see Political Briefing first.
+
+A returning user should see:
+
+"Since your last visit, 18 important stories emerged."
+
+Users should feel understood.
+
+---
+
+PHASE 3:
+ENTERPRISE SOFTWARE ARCHITECTURE
+
+Refactor toward a modular architecture.
+
+Implement clear separation of concerns.
+
+Suggested domains:
+
+/application
+/domain
+/infrastructure
+/interfaces
+/services
+/jobs
+/ai
+/newsroom
+/alerts
+/admin
+/shared
+
+Eliminate large files.
+
+Reduce coupling.
+
+Increase testability.
+
+Document architectural decisions.
+
+Ensure new engineers can onboard quickly.
+
+---
+
+PHASE 4:
+PRODUCTION RELIABILITY
+
+Guarantee webhook responses under 5 seconds.
+
+Move long-running work into queues.
+
+Introduce:
+
+* BullMQ,
+* Redis-backed jobs,
+* retries,
+* exponential backoff,
+* dead-letter queues,
+* idempotency keys,
+* circuit breakers,
+* timeout handling,
+* graceful degradation.
+
+External provider failures must never break the user experience.
+
+Fallbacks should exist for:
+
+* AI providers,
+* RSS feeds,
+* translation services,
+* football APIs,
+* weather providers.
+
+---
+
+PHASE 5:
+SECURITY HARDENING
+
+Review the entire application.
+
+Implement:
+
+* input validation,
+* output encoding,
+* secret rotation readiness,
+* environment isolation,
+* rate limiting,
+* webhook signature verification,
+* abuse prevention,
+* audit trails,
+* secure admin authorization,
+* least-privilege access.
+
+Ensure no sensitive information can leak.
+
+---
+
+PHASE 6:
+DATABASE EXCELLENCE
+
+Audit PostgreSQL thoroughly.
+
+Implement:
+
+* proper indexing,
+* unique constraints,
+* transaction safety,
+* optimized queries,
+* query monitoring,
+* migration rollback support,
+* archival strategies,
+* duplicate prevention,
+* connection pooling.
+
+Prepare for hundreds of thousands of users.
+
+---
+
+PHASE 7:
+PERFORMANCE OPTIMIZATION
+
+Improve:
+
+* response times,
+* memory efficiency,
+* database utilization,
+* caching strategy,
+* API consumption.
+
+Introduce intelligent caching.
+
+Reduce unnecessary calls.
+
+Optimize scheduled jobs.
+
+Measure before optimizing.
+
+---
+
+PHASE 8:
+OBSERVABILITY
+
+Implement production-grade visibility.
+
+Include:
+
+* structured logging,
+* correlation IDs,
+* request tracing,
+* centralized error reporting,
+* operational dashboards,
+* alerting mechanisms,
+* health indicators.
+
+Support engineers should diagnose issues quickly.
+
+---
+
+PHASE 9:
+DEPLOYMENT EXCELLENCE
+
+Review Render deployment readiness.
+
+Implement:
+
+* startup validation,
+* health endpoints,
+* readiness probes,
+* graceful shutdown,
+* environment verification,
+* deployment documentation,
+* rollback procedures.
+
+Prepare for zero-downtime releases.
+
+---
+
+PHASE 10:
+TESTING STANDARDS
+
+Introduce comprehensive testing.
+
+Cover:
+
+* unit tests,
+* integration tests,
+* contract tests,
+* WhatsApp interaction tests,
+* AI routing tests,
+* queue processing tests,
+* subscription flows,
+* journalist escalation flows,
+* admin workflows.
+
+Identify critical edge cases.
+
+Prevent regressions.
+
+---
+
+PHASE 11:
+SCALABILITY ROADMAP
+
+Design with future assumptions:
+
+* 500,000+ users,
+* multiple regional newsrooms,
+* additional African countries,
+* multilingual expansion,
+* SMS support,
+* Telegram support,
+* mobile applications,
+* web applications.
+
+Ensure architecture evolves without major rewrites.
+
+---
+
+PHASE 12:
+PREMIUM NEWSROOM INNOVATIONS
+
+Elevate NaijaScope beyond ordinary bots.
+
+Introduce sophisticated experiences such as:
+
+* Morning Briefing cards optimized for WhatsApp,
+* Evening Wrap-Up summaries,
+* AI-generated explainers,
+* "Why this matters" context,
+* story timelines,
+* follow-up reminders on developing stories,
+* journalist-curated collections,
+* election trackers,
+* regional intelligence briefings,
+* personalized news digests,
+* conversational discovery experiences.
+
+Every innovation must justify its complexity.
+
+No gimmicks.
+
+Focus on usefulness.
+
+---
+
+FINAL DELIVERABLES
+
+Provide:
+
+1. Full engineering audit report.
+2. Prioritized remediation roadmap.
+3. Updated architecture proposal.
+4. Refactored implementation recommendations.
+5. Database recommendations.
+6. Security recommendations.
+7. Reliability recommendations.
+8. Performance recommendations.
+9. Observability recommendations.
+10. Deployment recommendations.
+11. Testing strategy.
+12. Production-readiness checklist.
+13. Launch-blocking issues.
+14. Optional future enhancements.
+15. Migration plan with zero breaking changes.
+16. Estimated implementation phases.
+17. Risk analysis for each phase.
+
+The final outcome should be a production-grade, enterprise-quality, premium AI newsroom platform that represents the highest standards of modern software engineering and conversational product design.
+
+Build as if NaijaScope will become Africa's defining media technology company.

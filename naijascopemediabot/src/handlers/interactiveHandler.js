@@ -9,6 +9,8 @@ import { saveArticle, getSavedArticles } from "../services/articleService.js";
 import { addSubscription } from "../services/alertService.js";
 import { saveLanguagePreference, LANG_NAMES } from "../services/languageService.js";
 import { upsertUser } from "../utils/db.js";
+import { getStoryExplainer } from "../services/aiService.js";
+import { trackCategoryRead } from "../services/preferenceService.js";
 import { awaitingTeamName, awaitingFactCheck, awaitingHandoff, lastSentNews, track } from "../state/sessionState.js";
 import { pollData } from "../jobs/dailyPoll.js";
 
@@ -18,6 +20,7 @@ export async function handleInteractive(from, replyId, userRow) {
   // ── News ────────────────────────────────────────────────────────────────────
   if (replyId === "top_news" || replyId === "menu_headlines") {
     track(from, "news");
+    trackCategoryRead(from, "politics").catch(() => {}); // approximate — headlines blend
     await sendNewsItems(from, items.slice(0, 5), "📰 Top stories right now:", userRow);
     return;
   }
@@ -34,12 +37,13 @@ export async function handleInteractive(from, replyId, userRow) {
   }
 
   if (replyId === "main_menu") {
-    await sendMainMenu(from);
+    await sendMainMenu(from, userRow);
     return;
   }
 
   if (replyId === "menu_football") {
     track(from, "football");
+    trackCategoryRead(from, "football").catch(() => {});
     await sendFootballMenu(from);
     return;
   }
@@ -56,6 +60,7 @@ export async function handleInteractive(from, replyId, userRow) {
   }
 
   if (replyId === "menu_markets") {
+    trackCategoryRead(from, "oil").catch(() => {});
     const [oil, fx] = await Promise.all([fetchOilPrice(), fetchExchangeRate()]);
     await sendText(from, oil);
     await sendText(from, fx);
@@ -116,31 +121,26 @@ export async function handleInteractive(from, replyId, userRow) {
     await sendAfterFootballMenu(from);
     return;
   }
-
   if (replyId === "football_fixtures") {
     await sendText(from, await fetchTodaysFixtures());
     await sendAfterFootballMenu(from);
     return;
   }
-
   if (replyId === "football_epl") {
     await sendText(from, await fetchEPLStandings());
     await sendAfterFootballMenu(from);
     return;
   }
-
   if (replyId === "football_ucl") {
     await sendText(from, await fetchUCLFixtures());
     await sendAfterFootballMenu(from);
     return;
   }
-
   if (replyId === "football_npfl") {
     const npfl = await fetchNPFLNews(items);
     await sendNewsItems(from, npfl, "🏟️ NPFL News:", userRow);
     return;
   }
-
   if (replyId === "football_transfers") {
     const transfers = await fetchTransferNews(items);
     if (transfers.length > 0) {
@@ -150,7 +150,6 @@ export async function handleInteractive(from, replyId, userRow) {
     }
     return;
   }
-
   if (replyId === "football_alerts") {
     awaitingTeamName.add(from);
     await sendText(from, "⚽ Which club do you want alerts for?\n\nJust type the team name — e.g. Enyimba, Arsenal, Manchester City");
@@ -158,6 +157,18 @@ export async function handleInteractive(from, replyId, userRow) {
   }
 
   // ── Post-article actions ──────────────────────────────────────────────────────
+  if (replyId === "action_explainer") {
+    const recent = lastSentNews.get(from);
+    if (recent?.[0]) {
+      await sendText(from, "💡 Generating context...");
+      const explainer = await getStoryExplainer(recent[0].title);
+      await sendText(from, explainer);
+    } else {
+      await sendText(from, "Read a story first, then I'll give you the full context! 👇");
+    }
+    return;
+  }
+
   if (replyId === "action_save") {
     const recent = lastSentNews.get(from);
     if (recent?.[0]) {

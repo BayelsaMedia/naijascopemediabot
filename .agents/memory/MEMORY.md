@@ -1,0 +1,1 @@
+- [NaijaScope Architecture](naijascope-arch.md) — modular decomposition, key files, migration pattern, and session-state exports

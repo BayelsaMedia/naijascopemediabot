@@ -5,8 +5,9 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATION_FILE = path.join(__dirname, "../../migrations/001_initial_schema.sql");
+const __dirname     = path.dirname(fileURLToPath(import.meta.url));
+const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql"];
+const MIGRATION_DIR = path.join(__dirname, "../../migrations");
 
 const REQUIRED_VARS = [
   "WHATSAPP_TOKEN",
@@ -59,16 +60,19 @@ export async function validateStartup() {
     process.exit(1);
   }
 
-  // Run schema migration
-  try {
-    const sql = fs.readFileSync(MIGRATION_FILE, "utf8");
-    await query(sql);
-    logger.info("[STARTUP] ✅ Schema migration applied");
-  } catch (err) {
-    logger.warn("[STARTUP] ⚠️  Migration skipped or failed:", err.message);
+  // Run schema migrations in order
+  for (const file of MIGRATIONS) {
+    const filePath = path.join(MIGRATION_DIR, file);
+    try {
+      const sql = fs.readFileSync(filePath, "utf8");
+      await query(sql);
+      logger.info(`[STARTUP] ✅ Migration applied: ${file}`);
+    } catch (err) {
+      logger.warn(`[STARTUP] ⚠️  Migration skipped (${file}): ${err.message}`);
+    }
   }
 
-  // Seed keyword alerts into memory
+  // Seed keyword alerts from DB into memory
   try {
     const { getAllKeywordAlerts } = await import("../services/alertService.js");
     const rows = await getAllKeywordAlerts();
