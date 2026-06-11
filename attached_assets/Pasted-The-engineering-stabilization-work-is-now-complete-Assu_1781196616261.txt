@@ -1,0 +1,125 @@
+The engineering stabilization work is now complete.
+
+Assume the existing NaijaScope platform has already undergone architectural auditing, security hardening, deployment optimization, testing improvements, database refinement, and reliability enhancements.
+
+Do NOT repeat those activities unless required to support the improvements below.
+
+Your new objective is to elevate NaijaScope from an exceptionally engineered WhatsApp bot into Africa's most sophisticated conversational newsroom experience.
+
+The codebase is stable.
+
+The focus now shifts toward product excellence, interaction design, personalization, and premium user experience.
+
+Preserve all existing functionality.
+
+Do not remove features.
+
+Do not introduce breaking changes.
+
+Enhance intelligently.
+
+Your mandate is to redesign the conversational layer to feel world-class.
+
+The benchmark is NOT other WhatsApp bots.
+
+The benchmark is the quality standards of Apple, Bloomberg, Perplexity, Spotify, and Meta.
+
+Review every customer-facing interaction and elevate it.
+
+Reimagine:
+
+* onboarding experiences,
+* returning-user experiences,
+* interactive menus,
+* subscription journeys,
+* alert experiences,
+* journalist handoffs,
+* AI conversations,
+* fallback experiences,
+* confirmation messages,
+* error states,
+* discovery flows,
+* football experiences,
+* opportunities experiences,
+* fact-checking experiences.
+
+Leverage WhatsApp's capabilities to their fullest extent.
+
+Move beyond static menus.
+
+Introduce sophisticated interaction models such as:
+
+* adaptive quick actions,
+* personalized home experiences,
+* recently used shortcuts,
+* contextual recommendations,
+* "continue where you left off" journeys,
+* intelligent follow-up prompts,
+* progressive disclosure,
+* engagement-aware navigation,
+* predictive resurfacing of valuable content.
+
+Menus should adapt dynamically based on:
+
+* user engagement history,
+* preferred topics,
+* subscribed alert types,
+* language preferences,
+* location,
+* football interests,
+* time-of-day usage patterns,
+* historical interaction behaviour.
+
+The experience should feel proactive without becoming intrusive.
+
+Every message must feel:
+
+* premium,
+* concise,
+* intelligent,
+* newsroom-grade,
+* trustworthy,
+* human,
+* emotionally aware,
+* professionally written.
+
+Redesign the messaging architecture.
+
+Rewrite every customer-facing message.
+
+Eliminate robotic phrasing.
+
+Introduce editorial sophistication.
+
+Develop reusable message standards for:
+
+* welcome experiences,
+* re-engagement flows,
+* subscription confirmations,
+* breaking news alerts,
+* briefing introductions,
+* journalist escalations,
+* AI explanations,
+* fact-check results,
+* fallback scenarios.
+
+Review the existing feature set and identify opportunities to elevate experiences without significantly increasing operational complexity.
+
+Focus on leverage.
+
+Small changes that dramatically improve perceived quality should be prioritized over feature expansion.
+
+The final deliverables should include:
+
+1. A complete conversational UX audit.
+2. A redesigned interaction architecture.
+3. Premium messaging standards.
+4. Adaptive menu recommendations.
+5. Personalization strategies.
+6. WhatsApp interaction enhancements.
+7. Journey maps for major user flows.
+8. Recommendations ranked by implementation effort versus user impact.
+9. Refactored examples of key interactions.
+10. A phased rollout plan that preserves platform stability.
+
+Build as if NaijaScope will define the future of AI-powered journalism experiences across Africa.

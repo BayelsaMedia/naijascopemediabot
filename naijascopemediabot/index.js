@@ -3,12 +3,18 @@ import crypto from "crypto";
 
 import { verifyWebhookSignature, sanitizeInput, isValidPhone } from "./src/middleware/security.js";
 import { sendText, markAsRead } from "./src/services/whatsappService.js";
-import { sendWelcomeMessage, sendMainMenu, sendReturnMenu } from "./src/whatsapp/menus.js";
+import { sendMainMenu, sendReturnMenu } from "./src/whatsapp/menus.js";
+import { sendOnboardingWelcome } from "./src/whatsapp/onboarding.js";
 import { upsertUser, getUser } from "./src/utils/db.js";
 import { logger, withCorrelationId } from "./src/utils/logger.js";
 import { validateStartup } from "./src/utils/startup.js";
 
-import { trackMessageId, track, tipsInProgress, reportsInProgress, awaitingTeamName, awaitingFactCheck, awaitingHandoff } from "./src/state/sessionState.js";
+import {
+  trackMessageId, track,
+  tipsInProgress, reportsInProgress,
+  awaitingTeamName, awaitingFactCheck, awaitingHandoff,
+  onboardingPending,
+} from "./src/state/sessionState.js";
 import { handleInteractive } from "./src/handlers/interactiveHandler.js";
 import { handleText, runTipFlow, runReportFlow } from "./src/handlers/textHandler.js";
 import { handleMedia } from "./src/handlers/mediaHandler.js";
@@ -71,7 +77,7 @@ app.post("/webhook", (req, res) => {
       incrementMessageCount(from).catch(() => {});
       logger.info(`[MSG] from=${from} type=${message.type}`);
 
-      // Check if user has an open support ticket (bot paused)
+      // ── Journalist handoff: bot paused for this user ──────────────────────
       const openTicket = await getOpenTicket(from);
       if (openTicket && message.type === "text") {
         const txt = message.text?.body?.trim().toLowerCase() || "";
@@ -89,14 +95,14 @@ app.post("/webhook", (req, res) => {
       const existingUser = await getUser(from);
       const userRow      = await upsertUser(from);
 
-      // ── Interactive (button / list) replies ──────────────────────────────────
+      // ── Interactive (button / list) replies ──────────────────────────────
       if (message.type === "interactive") {
         const replyId = message.interactive?.button_reply?.id || message.interactive?.list_reply?.id;
         await handleInteractive(from, replyId, userRow);
         return;
       }
 
-      // ── Non-text media (location, image, audio) ──────────────────────────────
+      // ── Non-text media (location, image, audio) ───────────────────────────
       if (message.type !== "text") {
         await handleMedia(from, message, userRow);
         return;
@@ -107,14 +113,14 @@ app.post("/webhook", (req, res) => {
       if (!rawText) return;
       const text = rawText.toLowerCase().trim();
 
-      // ── Active multi-step flows ──────────────────────────────────────────────
+      // ── Active multi-step flows ───────────────────────────────────────────
       if (tipsInProgress.has(from))    { await runTipFlow(from, text, rawText);  return; }
       if (reportsInProgress.has(from)) { await runReportFlow(from, rawText);     return; }
 
       if (awaitingTeamName.has(from)) {
         awaitingTeamName.delete(from);
         await subscribeToTeam(from, rawText);
-        await sendText(from, `⚡ Subscribed to ${rawText} alerts! I'll notify you of match updates. ⚽`);
+        await sendText(from, `⚡ Subscribed to ${rawText} alerts! You'll get match updates as they happen ⚽`);
         return;
       }
 
@@ -131,31 +137,38 @@ app.post("/webhook", (req, res) => {
         return;
       }
 
-      // ── Admin commands ───────────────────────────────────────────────────────
+      // ── Admin commands ────────────────────────────────────────────────────
       if (isAdmin(from)) {
         const handled = await handleAdmin(from, rawText);
         if (handled) return;
       }
 
-      // ── First-time user onboarding ───────────────────────────────────────────
+      // ── First-time user: personalized onboarding ──────────────────────────
       if (!existingUser) {
-        await sendWelcomeMessage(from);
+        onboardingPending.add(from);
+        await sendOnboardingWelcome(from);
         return;
       }
 
-      // ── Smart returning-user experience (away > 24 h) ────────────────────────
+      // Users who received the onboarding picker but typed instead of tapping
+      if (onboardingPending.has(from)) {
+        await sendText(from, "👆 Tap one of the options above to pick your interest — or type 'menu' to jump straight in!");
+        return;
+      }
+
+      // ── Smart returning-user experience (away > 24 h) ─────────────────────
       if (userRow?.last_seen) {
         const hoursSince = (Date.now() - new Date(userRow.last_seen).getTime()) / 3_600_000;
         if (hoursSince > 24) {
-          const items        = await fetchRSSItems();
-          const newCount     = countNewStoriesSince(items, userRow.last_seen);
-          const topCats      = detectTopCategories(items.slice(0, 15));
+          const items    = await fetchRSSItems();
+          const newCount = countNewStoriesSince(items, userRow.last_seen);
+          const topCats  = detectTopCategories(items.slice(0, 15));
           await sendReturnMenu(from, newCount, topCats);
           return;
         }
       }
 
-      // ── Text commands + AI fallback ──────────────────────────────────────────
+      // ── Text commands + AI fallback ───────────────────────────────────────
       await handleText(from, text, rawText, userRow);
 
     } catch (err) {

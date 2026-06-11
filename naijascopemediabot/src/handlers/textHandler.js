@@ -1,15 +1,16 @@
-import { sendText } from "../services/whatsappService.js";
+import { sendText, sendButtons } from "../services/whatsappService.js";
 import {
   sendMainMenu, sendSubscriptionMenu, sendLanguageMenu, sendFootballMenu,
 } from "../whatsapp/menus.js";
 import {
   sendNewsItems, fetchRSSItems, getNewsByCategory,
   fetchOilPrice, fetchExchangeRate, fetchWeather, fetchFloodAlert,
+  categorizeStory,
 } from "../services/newsService.js";
-import { getAIResponse } from "../services/aiService.js";
+import { getAIResponse, getStoryExplainer } from "../services/aiService.js";
 import { verifyClaim } from "../services/factCheckService.js";
 import { subscribeToTeam } from "../services/footballService.js";
-import { getSavedArticles } from "../services/articleService.js";
+import { saveArticle, getSavedArticles } from "../services/articleService.js";
 import { addSubscription, removeSubscription, persistKeywordAlert } from "../services/alertService.js";
 import { saveLanguagePreference, detectLanguageIntent, LANG_NAMES } from "../services/languageService.js";
 import { transferToHuman, isHandoffRequest } from "../services/supportService.js";
@@ -17,10 +18,10 @@ import { trackCategoryRead } from "../services/preferenceService.js";
 import {
   tipsInProgress, reportsInProgress,
   awaitingTeamName, awaitingFactCheck, awaitingHandoff,
-  promiseTracker, checkRateLimit, track,
+  promiseTracker, lastSentNews, checkRateLimit, track,
 } from "../state/sessionState.js";
 import { getPollResults } from "../jobs/dailyPoll.js";
-import { CATEGORY_KEYWORDS, SITE_URL } from "../config/constants.js";
+import { CATEGORY_KEYWORDS, CATEGORY_META, SITE_URL } from "../config/constants.js";
 import { logger } from "../utils/logger.js";
 
 const ADMIN_NUMBER = process.env.ADMIN_NUMBER;
@@ -32,12 +33,12 @@ export async function runTipFlow(from, text, rawText) {
   if (flow.step === 1) {
     flow.data.about = rawText; flow.step = 2;
     await sendText(from, "📍 Step 2 of 3: Which location does this involve? (City / LGA / Community)");
-    return true;
+    return;
   }
   if (flow.step === 2) {
     flow.data.location = rawText; flow.step = 3;
     await sendText(from, "📎 Step 3 of 3: Any evidence? Send a photo or type 'none'");
-    return true;
+    return;
   }
   if (flow.step === 3) {
     flow.data.evidence = text === "none" ? "No evidence provided" : rawText;
@@ -46,9 +47,7 @@ export async function runTipFlow(from, text, rawText) {
     if (ADMIN_NUMBER) {
       await sendText(ADMIN_NUMBER, `🔔 New Anonymous Tip:\n\nAbout: ${flow.data.about}\nLocation: ${flow.data.location}\nEvidence: ${flow.data.evidence}`);
     }
-    return true;
   }
-  return false;
 }
 
 export async function runReportFlow(from, rawText) {
@@ -56,17 +55,17 @@ export async function runReportFlow(from, rawText) {
   if (flow.step === 1) {
     flow.data.what = rawText; flow.step = 2;
     await sendText(from, "📍 Step 2 of 4: Where exactly did this happen? (Location)");
-    return true;
+    return;
   }
   if (flow.step === 2) {
     flow.data.where = rawText; flow.step = 3;
     await sendText(from, "🕐 Step 3 of 4: When did this happen? (Date and time)");
-    return true;
+    return;
   }
   if (flow.step === 3) {
     flow.data.when = rawText; flow.step = 4;
     await sendText(from, "📷 Step 4 of 4: Send a photo if you have one, or type 'none'");
-    return true;
+    return;
   }
   if (flow.step === 4) {
     flow.data.photo = rawText.toLowerCase() === "none" ? "No photo" : "Photo submitted";
@@ -75,9 +74,7 @@ export async function runReportFlow(from, rawText) {
     if (ADMIN_NUMBER) {
       await sendText(ADMIN_NUMBER, `📰 New Citizen Report:\n\nWhat: ${flow.data.what}\nWhere: ${flow.data.where}\nWhen: ${flow.data.when}\nPhoto: ${flow.data.photo}`);
     }
-    return true;
   }
-  return false;
 }
 
 // ── Promise tracker ────────────────────────────────────────────────────────────
@@ -89,56 +86,107 @@ function getPromises(politicianRaw) {
       return `📋 Promise Tracker — ${key}:\n\n${lines}\n\nSource: NaijaScope Media`;
     }
   }
-  return `No promise records found for "${politicianRaw}" yet.\n\nType 'help' to explore all features.`;
+  return `No promise records found for "${politicianRaw}" yet.\n\nType 'help' to explore all NaijaScope features.`;
+}
+
+// ── Discover / trending experience ────────────────────────────────────────────
+async function sendDiscoverCard(from, items, userRow) {
+  const counts = {};
+  for (const item of items.slice(0, 25)) {
+    const title = (item.title || "").toLowerCase();
+    for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS)) {
+      if (kws.some(kw => title.includes(kw.toLowerCase()))) {
+        counts[cat] = (counts[cat] || 0) + 1;
+        break;
+      }
+    }
+  }
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) {
+    await sendNewsItems(from, items.slice(0, 5), null, userRow);
+    return;
+  }
+
+  const lines = sorted.slice(0, 5).map(([cat, count]) => {
+    const { emoji, label } = CATEGORY_META[cat] || { emoji: "📰", label: cat };
+    return `${emoji} ${label} — ${count} ${count === 1 ? "story" : "stories"}`;
+  });
+
+  await sendText(from, `🔎 What's making noise in Nigeria right now:\n\n${lines.join("\n")}\n\nWhat would you like to dive into?`);
+
+  const top3 = sorted.slice(0, 3);
+  const buttons = top3.map(([cat]) => {
+    const { emoji, label } = CATEGORY_META[cat] || { emoji: "📰", label: cat };
+    return { id: `cat_${cat}`, title: `${emoji} ${label}`.slice(0, 20) };
+  });
+
+  await sendButtons(from, "Choose a theme to explore:", buttons);
 }
 
 // ── Main text command router ───────────────────────────────────────────────────
 export async function handleText(from, text, rawText, userRow) {
   track(from, text.split(" ")[0]);
 
+  // ── Navigation ───────────────────────────────────────────────────────────────
   if (text === "menu" || text === "help") { await sendMainMenu(from, userRow); return; }
 
-  if (text === "news" || text === "headlines") {
+  // ── News ─────────────────────────────────────────────────────────────────────
+  if (text === "news" || text === "headlines" || text === "top") {
     const items = await fetchRSSItems();
-    await sendNewsItems(from, items.slice(0, 5), "📰 Top stories right now:", userRow);
+    await sendNewsItems(from, items.slice(0, 5), null, userRow);
     return;
   }
 
-  if (text === "trending") {
+  if (text === "trending" || text === "hot") {
     const items = await fetchRSSItems();
     await sendNewsItems(from, items.slice(0, 3), "🔥 Trending on NaijaScope:", userRow);
     return;
   }
 
-  if (text === "football" || text === "soccer") {
-    trackCategoryRead(from, "football").catch(() => {});
-    await sendFootballMenu(from);
+  if (text === "discover" || text === "what's happening" || text === "explore") {
+    const items = await fetchRSSItems();
+    await sendDiscoverCard(from, items, userRow);
     return;
   }
 
-  if (text === "contact") {
-    await sendText(from, `📞 NaijaScope Media:\n\n🌐 ${SITE_URL}\n📧 admin@bayelsamedia.com.ng\n\nWe'd love to hear from you! 🇳🇬`);
+  // ── Category shortcuts triggered by dynamic discover buttons ─────────────────
+  if (text.startsWith("cat_")) {
+    const category = text.replace("cat_", "");
+    trackCategoryRead(from, category).catch(() => {});
+    const catItems = await getNewsByCategory(category);
+    const { emoji, label } = CATEGORY_META[category] || { emoji: "📰", label: category };
+    await sendNewsItems(from, catItems, `${emoji} ${label} News:`, userRow);
     return;
   }
 
-  if (text === "subscribe") { await sendSubscriptionMenu(from); return; }
-  if (text === "unsubscribe") {
-    await Promise.all([
-      removeSubscription(from, "daily_digest"),
-      removeSubscription(from, "breaking_news"),
-    ]);
-    await sendText(from, "👋 Unsubscribed from all alerts. No wahala!\n\nType 'subscribe' anytime to rejoin.");
+  // ── Post-article text shortcuts ───────────────────────────────────────────────
+  if (text === "why" || text === "why this matters" || text === "context") {
+    const recent = lastSentNews.get(from);
+    if (recent?.[0]) {
+      await sendText(from, "💡 Generating context...");
+      await sendText(from, await getStoryExplainer(recent[0].title));
+    } else {
+      await sendText(from, "Read a story first, then type 'why' for the context behind it! 👇");
+    }
     return;
   }
 
-  if (text === "language" || text === "my language") { await sendLanguageMenu(from); return; }
-  if (text === "pidgin on")  { await saveLanguagePreference(from, "pidgin"); await sendText(from, "Oya! Pidgin mode don activate 🇳🇬"); return; }
-  if (text === "pidgin off") { await saveLanguagePreference(from, "en");     await sendText(from, "Pidgin mode off. Back to English! ✅"); return; }
+  if (text === "save" || text === "bookmark") {
+    const recent = lastSentNews.get(from);
+    if (recent?.[0]) {
+      await saveArticle(from, recent[0]);
+      await sendText(from, "🔖 Saved! Type 'saved' anytime to revisit your reading list.");
+    } else {
+      await sendText(from, "Read a story first and then save it! 👇");
+    }
+    return;
+  }
 
   if (text === "saved" || text === "my saved" || text === "bookmarks") {
     const saved = await getSavedArticles(from);
     if (saved.length === 0) {
-      await sendText(from, "📚 Your reading list is empty.\n\nAfter reading a story, tap 'Save This' to bookmark it!");
+      await sendText(from, "📚 Your reading list is empty.\n\nAfter reading a story, type 'save' or tap 'Save This'!");
     } else {
       const lines = saved.map((a, i) => `${i + 1}. ${a.article_title}\n🔗 ${a.article_url}`).join("\n\n");
       await sendText(from, `🔖 Your saved articles:\n\n${lines}`);
@@ -146,8 +194,39 @@ export async function handleText(from, text, rawText, userRow) {
     return;
   }
 
-  if (text === "oil price" || text === "oil price today") { trackCategoryRead(from, "oil").catch(() => {}); await sendText(from, await fetchOilPrice()); return; }
-  if (text === "dollar rate" || text === "exchange rate" || text === "naira rate") { await sendText(from, await fetchExchangeRate()); return; }
+  // ── Football ──────────────────────────────────────────────────────────────────
+  if (text === "football" || text === "soccer" || text === "sports") {
+    trackCategoryRead(from, "sports").catch(() => {});
+    await sendFootballMenu(from);
+    return;
+  }
+
+  // ── Subscriptions ─────────────────────────────────────────────────────────────
+  if (text === "subscribe") { await sendSubscriptionMenu(from); return; }
+  if (text === "unsubscribe") {
+    await Promise.all([
+      removeSubscription(from, "daily_digest"),
+      removeSubscription(from, "breaking_news"),
+    ]);
+    await sendText(from, "👋 Unsubscribed from all alerts. No wahala!\n\nType 'subscribe' anytime to rejoin 📡");
+    return;
+  }
+
+  // ── Language ──────────────────────────────────────────────────────────────────
+  if (text === "language" || text === "my language") { await sendLanguageMenu(from); return; }
+  if (text === "pidgin on")  { await saveLanguagePreference(from, "pidgin"); await sendText(from, "Oya! Pidgin mode don activate 🇳🇬"); return; }
+  if (text === "pidgin off") { await saveLanguagePreference(from, "en");     await sendText(from, "Pidgin mode off. Back to English ✅"); return; }
+
+  // ── Markets ───────────────────────────────────────────────────────────────────
+  if (text === "oil" || text === "oil price" || text === "oil today") {
+    trackCategoryRead(from, "oil").catch(() => {});
+    await sendText(from, await fetchOilPrice());
+    return;
+  }
+  if (text === "dollar" || text === "naira" || text === "exchange rate" || text === "dollar rate") {
+    await sendText(from, await fetchExchangeRate());
+    return;
+  }
   if (text === "markets") {
     trackCategoryRead(from, "oil").catch(() => {});
     const [oil, fx] = await Promise.all([fetchOilPrice(), fetchExchangeRate()]);
@@ -156,21 +235,26 @@ export async function handleText(from, text, rawText, userRow) {
     return;
   }
 
-  if (text === "flood alert" || text === "flood") { await sendText(from, await fetchFloodAlert()); return; }
+  // ── Weather & environment ─────────────────────────────────────────────────────
+  if (text === "flood" || text === "flood alert") {
+    await sendText(from, await fetchFloodAlert());
+    return;
+  }
   if (text.startsWith("weather ")) {
     const city = rawText.slice(8).trim();
-    if (!city) { await sendText(from, "Which city? E.g: weather Yenagoa"); return; }
+    if (!city) { await sendText(from, "Which city? e.g: weather Yenagoa"); return; }
     await sendText(from, await fetchWeather(city));
     return;
   }
 
-  if (text === "opportunities" || text === "jobs" || text === "scholarships") {
+  // ── Opportunities ─────────────────────────────────────────────────────────────
+  if (["opportunities", "jobs", "scholarships", "grants"].includes(text)) {
     trackCategoryRead(from, "opportunities").catch(() => {});
-    const opps = await getNewsByCategory("opportunities");
-    await sendNewsItems(from, opps || [], "🎓 Latest opportunities:", userRow);
+    await sendNewsItems(from, await getNewsByCategory("opportunities"), "🎓 Latest opportunities:", userRow);
     return;
   }
 
+  // ── Community ─────────────────────────────────────────────────────────────────
   if (text === "poll") { await sendText(from, getPollResults()); return; }
 
   if (text.startsWith("fact check ") || text.startsWith("fact-check ")) {
@@ -191,14 +275,19 @@ export async function handleText(from, text, rawText, userRow) {
     return;
   }
 
-  if (text === "election" || text === "2027 election") {
+  // ── NaijaScope beats ──────────────────────────────────────────────────────────
+  if (text === "election" || text === "2027" || text === "2027 election") {
     trackCategoryRead(from, "election").catch(() => {});
-    await sendNewsItems(from, await getNewsByCategory("election") || [], "🗳️ 2027 Election updates:", userRow);
+    await sendNewsItems(from, await getNewsByCategory("election"), "🗳️ 2027 Election coverage:", userRow);
     return;
   }
   if (text === "nddc") {
     trackCategoryRead(from, "nddc").catch(() => {});
-    await sendNewsItems(from, await getNewsByCategory("nddc") || [], "📋 NDDC Tracker:", userRow);
+    await sendNewsItems(from, await getNewsByCategory("nddc"), "📋 NDDC Tracker:", userRow);
+    return;
+  }
+  if (text === "contact") {
+    await sendText(from, `📞 NaijaScope Media:\n\n🌐 ${SITE_URL}\n📧 admin@bayelsamedia.com.ng\n\nWe'd love to hear from you 🇳🇬`);
     return;
   }
 
@@ -211,40 +300,41 @@ export async function handleText(from, text, rawText, userRow) {
     const kw = rawText.slice(6).trim().toLowerCase();
     if (kw) {
       await persistKeywordAlert(from, kw);
-      await sendText(from, `🔔 Alert set for "${kw}". I'll notify you whenever it hits the news!`);
+      await sendText(from, `🔔 Alert set for "${kw}"!\n\nI'll notify you the moment it hits the news. 📡`);
     }
     return;
   }
 
   if (text === "tip" || text === "send tip") {
     tipsInProgress.set(from, { step: 1, data: {} });
-    await sendText(from, "🕵️ Anonymous Tip Submission (3 steps)\n\nStep 1 of 3: What is your tip about?");
+    await sendText(from, "🕵️ Anonymous Tip Submission (3 steps)\n\nYour identity will never be revealed.\n\nStep 1 of 3: What is your tip about?");
     return;
   }
 
   if (text === "report" || text === "citizen report") {
     reportsInProgress.set(from, { step: 1, data: {} });
-    await sendText(from, "📰 Citizen Report (4 steps)\n\nStep 1 of 4: What happened?");
+    await sendText(from, "📰 Citizen Report (4 steps)\n\nYour report goes directly to our newsroom.\n\nStep 1 of 4: What happened?");
     return;
   }
 
-  // Category shortcuts (politics, oil, crime, etc.)
+  // ── Category shortcuts ────────────────────────────────────────────────────────
   if (Object.keys(CATEGORY_KEYWORDS).includes(text)) {
     trackCategoryRead(from, text).catch(() => {});
-    await sendNewsItems(from, await getNewsByCategory(text) || [], `📰 Latest ${text} news:`, userRow);
+    const { emoji, label } = CATEGORY_META[text] || { emoji: "📰", label: text };
+    await sendNewsItems(from, await getNewsByCategory(text), `${emoji} Latest ${label} news:`, userRow);
     return;
   }
 
-  // Language intent from natural language
+  // ── Language intent ───────────────────────────────────────────────────────────
   const langIntent = detectLanguageIntent(text);
   if (langIntent) {
     await saveLanguagePreference(from, langIntent);
     const langName = LANG_NAMES[langIntent] || langIntent;
-    await sendText(from, `✅ Language set to ${langName}! News coming your way in ${langName}. 🇳🇬`);
+    await sendText(from, `✅ Language set to ${langName}! News coming your way in ${langName} 🇳🇬`);
     return;
   }
 
-  // AI fallback
+  // ── AI fallback ───────────────────────────────────────────────────────────────
   if (!checkRateLimit(from)) {
     await sendText(from, "Easy now — give me 3 seconds to breathe 😄");
     return;

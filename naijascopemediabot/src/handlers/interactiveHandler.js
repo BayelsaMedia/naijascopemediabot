@@ -1,27 +1,37 @@
-import { sendText } from "../services/whatsappService.js";
+import { sendText, sendButtons } from "../services/whatsappService.js";
 import {
   sendMainMenu, sendSubscriptionMenu, sendFootballMenu,
   sendLanguageMenu, sendAfterFootballMenu,
 } from "../whatsapp/menus.js";
+import { completeOnboarding } from "../whatsapp/onboarding.js";
 import { sendNewsItems, fetchRSSItems, fetchOilPrice, fetchExchangeRate } from "../services/newsService.js";
-import { fetchEPLStandings, fetchUCLFixtures, fetchTodaysFixtures, fetchLiveScores, fetchNPFLNews, fetchTransferNews, subscribeToTeam } from "../services/footballService.js";
+import { fetchEPLStandings, fetchUCLFixtures, fetchTodaysFixtures, fetchLiveScores, fetchNPFLNews, fetchTransferNews } from "../services/footballService.js";
 import { saveArticle, getSavedArticles } from "../services/articleService.js";
 import { addSubscription } from "../services/alertService.js";
 import { saveLanguagePreference, LANG_NAMES } from "../services/languageService.js";
 import { upsertUser } from "../utils/db.js";
 import { getStoryExplainer } from "../services/aiService.js";
 import { trackCategoryRead } from "../services/preferenceService.js";
-import { awaitingTeamName, awaitingFactCheck, awaitingHandoff, lastSentNews, track } from "../state/sessionState.js";
+import { awaitingTeamName, awaitingFactCheck, awaitingHandoff, lastSentNews, onboardingPending, track } from "../state/sessionState.js";
 import { pollData } from "../jobs/dailyPoll.js";
+import { SITE_URL } from "../config/constants.js";
 
 export async function handleInteractive(from, replyId, userRow) {
   const items = await fetchRSSItems().catch(() => []);
 
+  // ── Onboarding interest picker ───────────────────────────────────────────────
+  if (replyId?.startsWith("onboard_")) {
+    const category = replyId.replace("onboard_", "");
+    onboardingPending.delete(from);
+    await completeOnboarding(from, category, userRow);
+    return;
+  }
+
   // ── News ────────────────────────────────────────────────────────────────────
   if (replyId === "top_news" || replyId === "menu_headlines") {
     track(from, "news");
-    trackCategoryRead(from, "politics").catch(() => {}); // approximate — headlines blend
-    await sendNewsItems(from, items.slice(0, 5), "📰 Top stories right now:", userRow);
+    trackCategoryRead(from, "politics").catch(() => {});
+    await sendNewsItems(from, items.slice(0, 5), null, userRow);
     return;
   }
 
@@ -43,7 +53,7 @@ export async function handleInteractive(from, replyId, userRow) {
 
   if (replyId === "menu_football") {
     track(from, "football");
-    trackCategoryRead(from, "football").catch(() => {});
+    trackCategoryRead(from, "sports").catch(() => {});
     await sendFootballMenu(from);
     return;
   }
@@ -89,26 +99,26 @@ export async function handleInteractive(from, replyId, userRow) {
   if (replyId === "sub_daily") {
     await addSubscription(from, "daily_digest");
     await upsertUser(from, { digest_enabled: true });
-    await sendText(from, "☀️ You're in! Daily briefing drops at 7AM WAT, sharp sharp 📰\n\nReply 'unsubscribe' anytime.");
+    await sendText(from, "☀️ Done! Your morning briefing drops at 7AM WAT every day.\n\nReply 'unsubscribe' anytime to stop. 📰");
     return;
   }
 
   if (replyId === "sub_breaking") {
     await addSubscription(from, "breaking_news");
     await upsertUser(from, { breaking_alerts: true });
-    await sendText(from, "🔴 Done! You'll be first to know when breaking news drops. No wahala 📡\n\nReply 'unsubscribe' anytime.");
+    await sendText(from, "🔴 You're in! You'll be the first to know when breaking news drops.\n\nReply 'unsubscribe' anytime. 📡");
     return;
   }
 
   if (replyId === "sub_opportunities") {
     await addSubscription(from, "opportunities");
-    await sendText(from, "🎓 Subscribed! I'll ping you whenever scholarships, grants or jobs come through. Sharp sharp 🎯");
+    await sendText(from, "🎓 Subscribed to Opportunities! I'll ping you whenever scholarships, grants or jobs come through. 🎯");
     return;
   }
 
   // ── Language ─────────────────────────────────────────────────────────────────
   if (replyId?.startsWith("lang_")) {
-    const lang = replyId.replace("lang_", "");
+    const lang     = replyId.replace("lang_", "");
     await saveLanguagePreference(from, lang);
     const langName = LANG_NAMES[lang] || lang;
     await sendText(from, `✅ Language set to ${langName}! All news will arrive in ${langName} from now on. E don happen! 🇳🇬`);
@@ -146,7 +156,7 @@ export async function handleInteractive(from, replyId, userRow) {
     if (transfers.length > 0) {
       await sendNewsItems(from, transfers, "🔄 Transfer News:", userRow);
     } else {
-      await sendText(from, "No transfer stories right now.\n\nCheck www.bayelsamedia.com.ng for the latest 🔗");
+      await sendText(from, `No transfer stories right now.\n\nCheck ${SITE_URL} for the latest. 🔗`);
     }
     return;
   }
@@ -173,9 +183,9 @@ export async function handleInteractive(from, replyId, userRow) {
     const recent = lastSentNews.get(from);
     if (recent?.[0]) {
       await saveArticle(from, recent[0]);
-      await sendText(from, "🔖 Saved! Type 'saved' anytime to see your reading list.");
+      await sendText(from, "🔖 Saved to your reading list! Type 'saved' anytime to see your bookmarks.");
     } else {
-      await sendText(from, "No recent article to save. Read a story first!");
+      await sendText(from, "Read a story first, then save it! 👇");
     }
     return;
   }
@@ -189,10 +199,10 @@ export async function handleInteractive(from, replyId, userRow) {
     const recent = lastSentNews.get(from);
     if (recent?.[0]) {
       const words = (recent[0].title || "").split(" ").slice(0, 2).join(" ");
-      const more  = items.filter(i => i.link !== recent[0].link && (i.title || "").toLowerCase().includes(words.toLowerCase())).slice(0, 3);
+      const more  = items.filter(i => i.link !== recent[0].link && (i.title || "").toLowerCase().includes(words.toLowerCase())).slice(0, 4);
       await sendNewsItems(from, more.length > 0 ? more : items.slice(5, 10), "🔍 More stories:", userRow);
     } else {
-      await sendNewsItems(from, items.slice(0, 5), "📰 Latest stories:", userRow);
+      await sendNewsItems(from, items.slice(0, 5), null, userRow);
     }
     return;
   }

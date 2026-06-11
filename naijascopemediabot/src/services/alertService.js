@@ -1,6 +1,7 @@
 import { query } from "../utils/db.js";
 import { sendText } from "./whatsappService.js";
 import { addUserAlert } from "../state/sessionState.js";
+import { categorizeStory } from "./newsService.js";
 import { logger } from "../utils/logger.js";
 import { SITE_URL } from "../config/constants.js";
 
@@ -15,8 +16,7 @@ export async function getSubscribers(type) {
 export async function addSubscription(whatsappNumber, type, value = type) {
   await query(
     `INSERT INTO user_subscriptions (whatsapp_number, subscription_type, subscription_value)
-     VALUES ($1, $2, $3)
-     ON CONFLICT DO NOTHING`,
+     VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
     [whatsappNumber, type, value]
   );
   await query(
@@ -36,8 +36,7 @@ export async function removeSubscription(whatsappNumber, type) {
 export async function persistKeywordAlert(whatsappNumber, keyword) {
   await query(
     `INSERT INTO user_keyword_alerts (whatsapp_number, keyword)
-     VALUES ($1, $2)
-     ON CONFLICT DO NOTHING`,
+     VALUES ($1, $2) ON CONFLICT DO NOTHING`,
     [whatsappNumber, keyword.toLowerCase()]
   );
   addUserAlert(whatsappNumber, keyword);
@@ -48,9 +47,12 @@ export async function getAllKeywordAlerts() {
   return res.rows;
 }
 
-// ── Breaking alert broadcast ───────────────────────────────────────────────────
+// ── Breaking news alert ────────────────────────────────────────────────────────
 export async function sendBreakingAlert(item, subscribers) {
-  const msg = `🔴 BREAKING: ${item.title}\n🔗 ${item.link}\n\nNaijaScope Media | ${SITE_URL}`;
+  const { emoji } = categorizeStory(item);
+  const now  = new Date().toLocaleTimeString("en-NG", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit" });
+  const msg  = `🔴 BREAKING — ${now} WAT\n\n${emoji} ${item.title}\n\nThis story is developing. Tap the link for full coverage.\n🔗 ${item.link}\n\n— NaijaScope Newsroom · ${SITE_URL}`;
+
   let sent = 0;
   for (const number of subscribers) {
     try {
@@ -61,5 +63,5 @@ export async function sendBreakingAlert(item, subscribers) {
       logger.error(`sendBreakingAlert failed for ${number}:`, err.message);
     }
   }
-  logger.info(`[BREAKING] Sent to ${sent}/${subscribers.length} subscribers`);
+  logger.info(`[BREAKING] Alert sent: "${item.title.slice(0, 60)}" → ${sent}/${subscribers.length}`);
 }

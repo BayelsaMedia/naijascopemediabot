@@ -51,6 +51,10 @@ export const promiseTracker = new Map();  // politician → [{ promise, status, 
 // ── Live breaking mode (admin toggle) ────────────────────────────────────────
 export const breakingLive = { active: false, topic: "" };
 
+// ── Onboarding state ──────────────────────────────────────────────────────────
+// Tracks users who have just received the welcome message but not yet picked an interest.
+export const onboardingPending = new Set();
+
 // ── Analytics ─────────────────────────────────────────────────────────────────
 export const analytics = {
   totalUsers:    new Set(),

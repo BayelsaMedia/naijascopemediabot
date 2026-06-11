@@ -2,17 +2,16 @@ import axios from "axios";
 import RSSParser from "rss-parser";
 import { logger } from "../utils/logger.js";
 import { CircuitBreaker } from "../utils/retry.js";
-import { sendText, sendList } from "./whatsappService.js";
+import { sendText, sendButtons } from "./whatsappService.js";
 import { sendAfterNewsMenu } from "../whatsapp/menus.js";
 import { lastSentNews, userAlerts } from "../state/sessionState.js";
-import { CATEGORY_KEYWORDS, BAYELSA_LGAS, RSS_FEED_URL, SITE_URL, CACHE_TTL_MS } from "../config/constants.js";
+import { CATEGORY_KEYWORDS, CATEGORY_META, BAYELSA_LGAS, RSS_FEED_URL, SITE_URL, CACHE_TTL_MS } from "../config/constants.js";
 import { translateArticle } from "./languageService.js";
 
 const rssParser = new RSSParser();
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
 const newsCache = new Map();
-
 function getCache(key) {
   const entry = newsCache.get(key);
   if (!entry) return null;
@@ -22,15 +21,47 @@ function getCache(key) {
 function setCache(key, data) { newsCache.set(key, { data, timestamp: Date.now() }); }
 
 // ── Circuit breakers ──────────────────────────────────────────────────────────
-const rssCircuit = new CircuitBreaker({ name: "RSS Feed",        threshold: 4, resetMs: 120_000 });
-const oilCircuit = new CircuitBreaker({ name: "Oil Price API",   threshold: 3, resetMs:  60_000 });
-const fxCircuit  = new CircuitBreaker({ name: "Exchange Rate API", threshold: 3, resetMs: 60_000 });
+const rssCircuit = new CircuitBreaker({ name: "RSS Feed",          threshold: 4, resetMs: 120_000 });
+const oilCircuit = new CircuitBreaker({ name: "Oil Price API",     threshold: 3, resetMs:  60_000 });
+const fxCircuit  = new CircuitBreaker({ name: "Exchange Rate API", threshold: 3, resetMs:  60_000 });
 
 // ── XML sanitizer ─────────────────────────────────────────────────────────────
 function sanitizeXml(raw) {
   return raw
     .replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;")
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\uFFFE\uFFFF]/g, "");
+}
+
+// ── Category detector ─────────────────────────────────────────────────────────
+export function categorizeStory(item) {
+  const title = (item.title || "").toLowerCase();
+  for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (kws.some(kw => title.includes(kw.toLowerCase()))) {
+      return CATEGORY_META[cat] || { label: "News", emoji: "📰" };
+    }
+  }
+  return { label: "News", emoji: "📰" };
+}
+
+// ── Relative time formatter ───────────────────────────────────────────────────
+function timeAgo(isoDate) {
+  if (!isoDate) return "";
+  const diff = Math.round((Date.now() - new Date(isoDate).getTime()) / 60_000);
+  if (diff < 1)   return "just now";
+  if (diff < 60)  return `${diff}m ago`;
+  const h = Math.floor(diff / 60);
+  if (h < 24)     return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+// ── Context-aware editorial header ───────────────────────────────────────────
+function editorialHeader(header) {
+  if (header) return header;
+  const hour = new Date().toLocaleString("en-NG", { timeZone: "Africa/Lagos", hour: "numeric", hour12: false });
+  const h = parseInt(hour);
+  if (h < 12) return "☀️ This morning in Nigeria:";
+  if (h < 17) return "🌤️ The afternoon headlines:";
+  return "🌆 Tonight's top stories:";
 }
 
 // ── RSS feed ──────────────────────────────────────────────────────────────────
@@ -56,7 +87,7 @@ export async function getNewsByCategory(category) {
     const cached = getCache(`cat_${category}`);
     if (cached) return cached;
     const items = await fetchRSSItems();
-    const kws = CATEGORY_KEYWORDS[category] || [category];
+    const kws   = CATEGORY_KEYWORDS[category] || [category];
     const filtered = items.filter(item =>
       kws.some(kw => (item.title || "").toLowerCase().includes(kw.toLowerCase()))
     );
@@ -65,47 +96,49 @@ export async function getNewsByCategory(category) {
     return result;
   } catch (err) {
     logger.error("getNewsByCategory error:", err.message);
-    return null;
+    return [];
   }
+}
+
+// ── Premium story card renderer ───────────────────────────────────────────────
+function buildStoryCard(items, headerText) {
+  const divider = "─────────────────";
+  const lines   = items.slice(0, 5).map((item, i) => {
+    const { emoji } = categorizeStory(item);
+    const when      = timeAgo(item.isoDate);
+    const tag       = when ? ` · ${when}` : "";
+    return `${i + 1}. ${emoji} ${item.title}\n🔗 ${item.link}${tag}`;
+  });
+  return [headerText, divider, ...lines, divider, SITE_URL].join("\n\n");
 }
 
 // ── Send news to user ─────────────────────────────────────────────────────────
 export async function sendNewsItems(to, items, header, userRow) {
   if (!items || items.length === 0) {
-    await sendText(to, `No stories found right now. Stay tuned or visit ${SITE_URL} 🔗`);
+    await sendText(to, `Nothing breaking at this moment — check ${SITE_URL} for the latest. I'll alert you the moment something hits. 🔔`);
+    await sendButtons(to, "What would you like to do?", [
+      { id: "menu_subscribe", title: "📡 Set Alerts" },
+      { id: "main_menu",      title: "🏠 Main Menu"  },
+    ]);
     return;
   }
 
   lastSentNews.set(to, items);
-  const top = items.slice(0, 5);
+  const top        = items.slice(0, 5);
+  const hdr        = editorialHeader(header);
+  let   storyCard  = buildStoryCard(top, hdr);
 
-  const rows = top.map((item, i) => ({
-    id:          `story_${i}`,
-    title:       (item.title || "Story").slice(0, 24),
-    description: "Read more →",
-  }));
-
-  let bodyText = header || "📰 Latest from NaijaScope:";
   if (userRow?.language_pref && userRow.language_pref !== "en") {
-    bodyText = await translateArticle(bodyText, userRow.language_pref);
+    try {
+      storyCard = await translateArticle(storyCard, userRow.language_pref);
+    } catch (_) {}
   }
 
-  try {
-    await sendList(to, bodyText, "View Headlines", [{ title: "Top Stories", rows }]);
-    const links = top.map((item, i) => `${i + 1}. ${item.title}\n🔗 ${item.link}`).join("\n\n");
-    await sendText(to, `🔗 Story links:\n\n${links}`);
-  } catch {
-    const fallback = top.reduce(
-      (m, item, i) => m + `${i + 1}. ${item.title}\n🔗 ${item.link}\n\n`,
-      bodyText + "\n\n"
-    ) + `${SITE_URL} 🇳🇬`;
-    await sendText(to, fallback);
-  }
-
+  await sendText(to, storyCard);
   await sendAfterNewsMenu(to);
 }
 
-// ── Keyword alert checker (called by breaking news monitor) ───────────────────
+// ── Keyword alert checker ─────────────────────────────────────────────────────
 export async function checkKeywordAlerts(newItems) {
   if (newItems.length === 0 || userAlerts.size === 0) return;
   for (const [userId, keywords] of userAlerts) {
@@ -113,7 +146,11 @@ export async function checkKeywordAlerts(newItems) {
       const title = (item.title || "").toLowerCase();
       for (const kw of keywords) {
         if (title.includes(kw.toLowerCase())) {
-          await sendText(userId, `🔔 Alert — "${kw}"\n\n${item.title}\n🔗 ${item.link}`);
+          const { emoji } = categorizeStory(item);
+          await sendText(
+            userId,
+            `🔔 Story Alert — "${kw}"\n\n${emoji} ${item.title}\n\nThis story matches your alert.\n🔗 ${item.link}\n\nReply "why" for AI context, or "save" to bookmark it.`
+          );
           await new Promise(r => setTimeout(r, 400));
           break;
         }
@@ -128,7 +165,7 @@ export async function fetchOilPrice() {
   if (cached) return cached;
   return oilCircuit.call(
     async () => {
-      const res = await axios.get(
+      const res   = await axios.get(
         "https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=1d&range=2d",
         { timeout: 8_000, headers: { "User-Agent": "Mozilla/5.0" } }
       );
@@ -136,12 +173,13 @@ export async function fetchOilPrice() {
       const price = (meta.regularMarketPrice || 0).toFixed(2);
       const prev  = (meta.chartPreviousClose || meta.regularMarketPrice || 0).toFixed(2);
       const diff  = (price - prev).toFixed(2);
+      const dir   = diff >= 0 ? "up" : "down";
       const arrow = diff >= 0 ? "📈" : "📉";
-      const msg   = `🛢️ Brent Crude: $${price}/barrel ${arrow}\nChange today: ${diff >= 0 ? "+" : ""}${diff}\n\nNiger Delta is watching. Want oil sector news?`;
+      const msg   = `🛢️ Brent Crude\n\n$${price} per barrel ${arrow}\n${dir === "up" ? "+" : ""}${diff} today\n\nNiger Delta is watching. Type "oil" for sector news.`;
       setCache("oil_price", msg);
       return msg;
     },
-    () => getCache("oil_price") || "Market data is taking a nap right now 😅\nType 'oil' for oil sector news."
+    () => getCache("oil_price") || "Market data is temporarily unavailable.\nType 'oil' for oil sector news instead. 🛢️"
   );
 }
 
@@ -151,15 +189,15 @@ export async function fetchExchangeRate() {
   if (cached) return cached;
   return fxCircuit.call(
     async () => {
-      const res = await axios.get("https://api.exchangerate-api.com/v4/latest/USD", { timeout: 8_000 });
-      const ngn  = res.data.rates?.NGN;
+      const res     = await axios.get("https://api.exchangerate-api.com/v4/latest/USD", { timeout: 8_000 });
+      const ngn     = res.data.rates?.NGN;
       if (!ngn) throw new Error("NGN rate not found");
       const parallel = Math.round(ngn * 1.08);
-      const msg = `💵 USD/NGN Exchange Rate:\n\n🏦 Market Rate: $1 = ₦${Math.round(ngn)}\n💸 Parallel (est.): $1 = ₦${parallel}\n\nRates fluctuate — visit CBN.gov.ng for the official rate. Anything else? 👇`;
+      const msg = `💵 USD / NGN\n\n🏦 Official: $1 = ₦${Math.round(ngn)}\n💸 Parallel (est.): $1 = ₦${parallel}\n\nFor the official CBN rate → cbn.gov.ng`;
       setCache("exchange_rate", msg);
       return msg;
     },
-    () => getCache("exchange_rate") || "Couldn't fetch the exchange rate right now 😅\nCheck cbn.gov.ng for the official rate."
+    () => getCache("exchange_rate") || "Exchange rate data is temporarily unavailable.\nCheck cbn.gov.ng for the official rate. 💵"
   );
 }
 
@@ -170,11 +208,11 @@ export async function fetchWeather(city) {
     if (cached) return cached;
     const res = await axios.get(`https://wttr.in/${encodeURIComponent(city)}?format=j1`, { timeout: 8_000 });
     const cur = res.data.current_condition[0];
-    const msg = `🌤️ ${city} weather:\n${cur.weatherDesc[0].value}, ${cur.temp_C}°C (feels like ${cur.FeelsLikeC}°C)\nHumidity: ${cur.humidity}%\n\nStay safe! Anything else?`;
+    const msg = `🌤️ ${city}\n\n${cur.weatherDesc[0].value}\n${cur.temp_C}°C · Feels like ${cur.FeelsLikeC}°C\nHumidity: ${cur.humidity}%\n\nStay prepared out there. Anything else?`;
     setCache(`weather_${city.toLowerCase()}`, msg);
     return msg;
   } catch {
-    return `Couldn't get weather for ${city} right now 🌧️\nTry again shortly or check a weather app.`;
+    return `Couldn't pull weather data for ${city} right now.\nTry again in a moment, or check a weather app. 🌤️`;
   }
 }
 
@@ -183,18 +221,18 @@ export async function fetchFloodAlert() {
   try {
     const cached = getCache("flood_alert");
     if (cached) return cached;
-    const res  = await axios.get("https://wttr.in/Yenagoa?format=j1", { timeout: 8_000 });
-    const cur  = res.data.current_condition[0];
-    const rain = res.data.weather?.[0]?.hourly?.reduce((sum, h) => sum + parseFloat(h.precipMM || 0), 0) || 0;
+    const res      = await axios.get("https://wttr.in/Yenagoa?format=j1", { timeout: 8_000 });
+    const cur      = res.data.current_condition[0];
+    const rain     = res.data.weather?.[0]?.hourly?.reduce((s, h) => s + parseFloat(h.precipMM || 0), 0) || 0;
     const humidity = parseInt(cur.humidity || 0);
     let risk = "LOW"; let emoji = "🟢";
-    if (rain > 20 || humidity > 90) { risk = "HIGH";     emoji = "🔴"; }
-    else if (rain > 8 || humidity > 80) { risk = "MODERATE"; emoji = "🟡"; }
-    const lgaLines = BAYELSA_LGAS.slice(0, 5).map(lga => `• ${lga}: ${risk}`).join("\n");
-    const msg = `${emoji} Bayelsa Flood Risk: ${risk}\n\n${lgaLines}\n\nRainfall: ${rain.toFixed(1)}mm | Humidity: ${humidity}%\n\nStay safe. Follow official BYSEMA alerts.`;
+    if (rain > 20 || humidity > 90)       { risk = "HIGH";     emoji = "🔴"; }
+    else if (rain > 8 || humidity > 80)   { risk = "MODERATE"; emoji = "🟡"; }
+    const lgaLines = BAYELSA_LGAS.slice(0, 5).map(lga => `· ${lga}: ${risk}`).join("\n");
+    const msg = `${emoji} Bayelsa Flood Risk: ${risk}\n\n${lgaLines}\n\nRainfall: ${rain.toFixed(1)}mm · Humidity: ${humidity}%\n\nFollow BYSEMA for official updates. Stay safe.`;
     setCache("flood_alert", msg);
     return msg;
   } catch {
-    return "Couldn't fetch flood data right now 🌊\nMonitor BYSEMA and local authorities for updates.";
+    return "Flood data is temporarily unavailable.\nMonitor BYSEMA and local authorities directly. 🌊";
   }
 }
