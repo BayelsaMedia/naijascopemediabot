@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/api-server",
+  "name": "naijascope-api-server",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -8,10 +8,12 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
     "axios": "^1.7.9",
     "express": "^5.2.1",
     "groq-sdk": "^1.2.1",
     "rss-parser": "^3.13.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
