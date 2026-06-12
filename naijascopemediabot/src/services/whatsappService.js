@@ -61,38 +61,68 @@ export async function sendButtons(to, bodyText, buttons) {
     });
   } catch (err) {
     logger.error("sendButtons error:", err?.response?.data || err.message);
-    // Graceful fallback to plain text
-    await sendText(to, bodyText + "\n\nReply: news · menu · subscribe · ask me anything");
+    // 3d. Plain-text fallback with numbered options
+    const numbered = buttons.slice(0, 3).map((b, i) => `${i + 1}. ${b.title}`).join("\n");
+    await sendText(to, `${bodyText}\n\n${numbered}\n\nReply with a number to choose.`);
   }
 }
 
-export async function sendList(to, bodyText, buttonLabel, sections) {
+/**
+ * Send a WhatsApp interactive list message.
+ * @param {string} to
+ * @param {string} bodyText
+ * @param {string} buttonLabel
+ * @param {Array}  sections
+ * @param {object} [opts]            — optional header / footer
+ * @param {string} [opts.header]     — plain-text header (max 60 chars)
+ * @param {string} [opts.footer]     — plain-text footer (max 60 chars)
+ */
+export async function sendList(to, bodyText, buttonLabel, sections, { header, footer } = {}) {
   if (!to || !bodyText || !sections?.length) return;
+
+  const interactive = {
+    type: "list",
+    body: { text: String(bodyText).slice(0, 1024) },
+    action: {
+      button: String(buttonLabel).slice(0, 20),
+      sections: sections.map(s => ({
+        title: String(s.title || "").slice(0, 24),
+        rows: (s.rows || []).slice(0, 10).map(r => ({
+          id: String(r.id).slice(0, 200),
+          title: String(r.title || "").slice(0, 24),
+          description: String(r.description || "").slice(0, 72),
+        })),
+      })),
+    },
+  };
+
+  if (header) interactive.header = { type: "text", text: String(header).slice(0, 60) };
+  if (footer) interactive.footer = { text: String(footer).slice(0, 60) };
+
   try {
     await post({
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to,
       type: "interactive",
-      interactive: {
-        type: "list",
-        body: { text: String(bodyText).slice(0, 1024) },
-        action: {
-          button: String(buttonLabel).slice(0, 20),
-          sections: sections.map(s => ({
-            title: String(s.title || "").slice(0, 24),
-            rows: (s.rows || []).slice(0, 10).map(r => ({
-              id: String(r.id).slice(0, 200),
-              title: String(r.title || "").slice(0, 24),
-              description: String(r.description || "").slice(0, 72),
-            })),
-          })),
-        },
-      },
+      interactive,
     });
   } catch (err) {
     logger.error("sendList error:", err?.response?.data || err.message);
-    await sendText(to, bodyText);
+    // 3d. Plain-text fallback with numbered options
+    let fallback = header ? `*${header}*\n\n` : "";
+    fallback += bodyText;
+    let counter = 1;
+    for (const s of sections) {
+      fallback += `\n\n*${s.title || "Options"}*`;
+      for (const r of (s.rows || [])) {
+        fallback += `\n${counter}. ${r.title}${r.description ? ` — ${r.description}` : ""}`;
+        counter++;
+      }
+    }
+    if (footer) fallback += `\n\n_${footer}_`;
+    fallback += "\n\nReply with a number to choose.";
+    await sendText(to, fallback);
   }
 }
 

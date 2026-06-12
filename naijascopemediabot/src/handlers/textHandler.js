@@ -1,6 +1,7 @@
 import { sendText, sendButtons } from "../services/whatsappService.js";
 import {
   sendMainMenu, sendSubscriptionMenu, sendLanguageMenu, sendFootballMenu,
+  sendWelcomeMessage, sendPostNewsButtons, sendPostGeneralButtons,
 } from "../whatsapp/menus.js";
 import {
   sendNewsItems, fetchRSSItems, getNewsByCategory,
@@ -124,9 +125,19 @@ async function sendDiscoverCard(from, items, userRow) {
   await sendButtons(from, "Choose a theme to explore:", buttons);
 }
 
+// ── Greeting detection ────────────────────────────────────────────────────────
+const GREETINGS = new Set([
+  "hi", "hello", "hey", "start", "hiya", "howdy", "yo",
+  "good morning", "good afternoon", "good evening",
+  "morning", "afternoon", "evening", "greetings", "sup",
+]);
+
 // ── Main text command router ───────────────────────────────────────────────────
 export async function handleText(from, text, rawText, userRow) {
   track(from, text.split(" ")[0]);
+
+  // ── 3a. Greeting → Welcome message ───────────────────────────────────────────
+  if (GREETINGS.has(text)) { await sendWelcomeMessage(from); return; }
 
   // ── Navigation ───────────────────────────────────────────────────────────────
   if (text === "menu" || text === "help") { await sendMainMenu(from, userRow); return; }
@@ -135,12 +146,14 @@ export async function handleText(from, text, rawText, userRow) {
   if (text === "news" || text === "headlines" || text === "top") {
     const items = await fetchRSSItems();
     await sendNewsItems(from, items.slice(0, 5), null, userRow);
+    await sendPostNewsButtons(from);
     return;
   }
 
   if (text === "trending" || text === "hot") {
     const items = await fetchRSSItems();
     await sendNewsItems(from, items.slice(0, 3), "🔥 Trending on NaijaScope:", userRow);
+    await sendPostNewsButtons(from);
     return;
   }
 
@@ -341,4 +354,6 @@ export async function handleText(from, text, rawText, userRow) {
   }
   const reply = await getAIResponse(from, rawText, userRow);
   await sendText(from, reply);
+  // 3b. Option B navigation buttons after every AI/general response
+  await sendPostGeneralButtons(from);
 }

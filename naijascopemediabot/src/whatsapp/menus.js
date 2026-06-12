@@ -1,16 +1,61 @@
 import { sendButtons, sendList, sendText } from "../services/whatsappService.js";
 
-// ── Welcome ───────────────────────────────────────────────────────────────────
+// ── 3a. Welcome / Greeting Message ───────────────────────────────────────────
 export async function sendWelcomeMessage(to) {
-  await sendButtons(
+  await sendList(
     to,
-    "👋 Welcome to NaijaScope.\n\nNigeria's most intelligent news assistant — delivering the stories that matter, the moment they break. 🇳🇬\n\nWhat would you like to start with?",
+    "Welcome to NaijaScope Media — your trusted source for Niger Delta news, Bayelsa State updates, and national intelligence. Select an option below to get started.",
+    "Explore Features",
     [
-      { id: "top_news",  title: "📰 Top Headlines" },
-      { id: "ask_ai",    title: "🤖 Ask Anything" },
-      { id: "subscribe", title: "📡 Get Alerts" },
-    ]
+      {
+        title: "News & Updates",
+        rows: [
+          { id: "welcome_latest",      title: "Latest Headlines",    description: "Get the most recent breaking news"           },
+          { id: "welcome_search",      title: "Search News",         description: "Find articles by topic or keyword"           },
+          { id: "welcome_niger_delta", title: "Niger Delta Focus",   description: "Stories from the heart of the region"        },
+          { id: "welcome_bayelsa",     title: "Bayelsa State News",  description: "Local government and community updates"       },
+        ],
+      },
+      {
+        title: "Media & Insights",
+        rows: [
+          { id: "welcome_market",   title: "Market Pulse",       description: "Nigerian stock market and financial data" },
+          { id: "welcome_watch",    title: "Watch & Listen",     description: "Video reports and media content"          },
+          { id: "welcome_opinion",  title: "Opinion & Analysis", description: "Editorial perspectives"                   },
+        ],
+      },
+      {
+        title: "About & Support",
+        rows: [
+          { id: "welcome_about",   title: "About NaijaScope", description: "Who we are and our mission"           },
+          { id: "welcome_contact", title: "Contact Us",        description: "Reach our editorial team"             },
+          { id: "welcome_website", title: "Visit Our Website", description: "Full coverage at bayelsamedia.com.ng" },
+        ],
+      },
+    ],
+    {
+      header: "NaijaScope Media Intelligence Bot",
+      footer: "Powered by NaijaScope Media | www.bayelsamedia.com.ng",
+    }
   );
+}
+
+// ── 3b. Post-news navigation buttons (Option A) ───────────────────────────────
+export async function sendPostNewsButtons(to) {
+  await sendButtons(to, "What would you like to do next?", [
+    { id: "nav_more_headlines", title: "More Headlines"  },
+    { id: "nav_search_topic",   title: "Search Topic"    },
+    { id: "nav_visit_website",  title: "Visit Website"   },
+  ]);
+}
+
+// ── 3b. Post-general navigation buttons (Option B) ───────────────────────────
+export async function sendPostGeneralButtons(to) {
+  await sendButtons(to, "Is there anything else I can help you with?", [
+    { id: "nav_back_menu",     title: "Back to Menu"  },
+    { id: "nav_search_news",   title: "Search News"   },
+    { id: "nav_visit_website", title: "Visit Website" },
+  ]);
 }
 
 // ── Smart return menu ─────────────────────────────────────────────────────────

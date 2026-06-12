@@ -1,0 +1,73 @@
+SECTION 3 — INTERACTIVE BUTTONS SYSTEM
+
+Implement a full interactive messaging system using the WhatsApp Cloud API's official interactive message types. This must be present on ALL relevant responses.
+
+3a. Welcome / Greeting Message (sent to all new users AND returning users who say "Hi", "Hello", "Hey", "Start", "Menu", or any greeting)
+
+Send an interactive list message with the following structure:
+
+Header: NaijaScope Media Intelligence Bot
+
+Body: Welcome to NaijaScope Media — your trusted source for Niger Delta news, Bayelsa State updates, and national intelligence. Select an option below to get started.
+
+Footer: Powered by NaijaScope Media | www.bayelsamedia.com.ng
+
+Button label: Explore Features
+
+List sections and rows:
+
+
+Section: "News & Updates"
+
+Latest Headlines — Get the most recent breaking news
+Search News — Find articles by topic or keyword
+Niger Delta Focus — Stories from the heart of the region
+Bayelsa State News — Local government and community updates
+
+
+
+Section: "Media & Insights"
+
+Market Pulse — Nigerian stock market and financial data
+Watch & Listen — Video reports and media content
+Opinion & Analysis — Editorial perspectives
+
+
+
+Section: "About & Support"
+
+About NaijaScope — Who we are and our mission
+Contact Us — Reach our editorial team
+Visit Our Website — Full coverage at bayelsamedia.com.ng
+
+
+
+
+
+3b. Post-Response Navigation Buttons
+
+After EVERY substantive AI response, append a set of reply buttons (maximum 3):
+
+Option A (for news-related responses):
+
+
+Button 1: "More Headlines"
+Button 2: "Search Topic"
+Button 3: "Visit Website"
+
+
+Option B (for general/informational responses):
+
+
+Button 1: "Back to Menu"
+Button 2: "Search News"
+Button 3: "Visit Website"
+
+
+3c. Button Handler
+
+Implement a dedicated handler for all interactive message types that maps each button ID or list row ID to the correct bot function. Buttons must always trigger the same action regardless of which user presses them.
+
+3d. Fallback for Unsupported Clients
+
+If an interactive message fails to send (API error from Meta), automatically retry with a plain-text equivalent that includes a numbered list of options.

@@ -2,9 +2,10 @@ import { sendText, sendButtons } from "../services/whatsappService.js";
 import {
   sendMainMenu, sendSubscriptionMenu, sendFootballMenu,
   sendLanguageMenu, sendAfterFootballMenu,
+  sendPostNewsButtons, sendPostGeneralButtons,
 } from "../whatsapp/menus.js";
 import { completeOnboarding } from "../whatsapp/onboarding.js";
-import { sendNewsItems, fetchRSSItems, fetchOilPrice, fetchExchangeRate } from "../services/newsService.js";
+import { sendNewsItems, fetchRSSItems, fetchOilPrice, fetchExchangeRate, getNewsByCategory } from "../services/newsService.js";
 import { fetchEPLStandings, fetchUCLFixtures, fetchTodaysFixtures, fetchLiveScores, fetchNPFLNews, fetchTransferNews } from "../services/footballService.js";
 import { saveArticle, getSavedArticles } from "../services/articleService.js";
 import { addSubscription } from "../services/alertService.js";
@@ -214,6 +215,112 @@ export async function handleInteractive(from, replyId, userRow) {
       pollData.votes.set(from, optIdx);
       await sendText(from, `✅ Vote recorded: "${pollData.options[optIdx]}"\n\nType 'poll' to see how others are voting!`);
     }
+    return;
+  }
+
+  // ── 3c. Welcome list handlers ─────────────────────────────────────────────────
+  if (replyId === "welcome_latest") {
+    track(from, "news");
+    trackCategoryRead(from, "politics").catch(() => {});
+    await sendNewsItems(from, items.slice(0, 5), null, userRow);
+    await sendPostNewsButtons(from);
+    return;
+  }
+
+  if (replyId === "welcome_search") {
+    await sendText(from, "🔍 What topic would you like to search for?\n\nJust type your search term — e.g. *Tinubu*, *NDDC*, *oil spill*, *Super Eagles*");
+    return;
+  }
+
+  if (replyId === "welcome_niger_delta") {
+    track(from, "niger_delta");
+    trackCategoryRead(from, "nddc").catch(() => {});
+    const ndDeltaItems = [
+      ...(await getNewsByCategory("nddc").catch(() => [])),
+      ...(await getNewsByCategory("environment").catch(() => [])),
+    ].slice(0, 5);
+    await sendNewsItems(from, ndDeltaItems.length > 0 ? ndDeltaItems : items.slice(0, 5), "🌿 Niger Delta Focus:", userRow);
+    await sendPostNewsButtons(from);
+    return;
+  }
+
+  if (replyId === "welcome_bayelsa") {
+    track(from, "bayelsa");
+    const bayelsaItems = items.filter(i =>
+      /(bayelsa|yenagoa|ijaw|ogbia|sagbama|nembe|brass)/i.test(i.title + " " + (i.contentSnippet || ""))
+    ).slice(0, 5);
+    await sendNewsItems(from, bayelsaItems.length > 0 ? bayelsaItems : items.slice(0, 5), "📍 Bayelsa State News:", userRow);
+    await sendPostNewsButtons(from);
+    return;
+  }
+
+  if (replyId === "welcome_market") {
+    trackCategoryRead(from, "oil").catch(() => {});
+    const [oil, fx] = await Promise.all([fetchOilPrice(), fetchExchangeRate()]);
+    await sendText(from, oil);
+    await sendText(from, fx);
+    await sendPostGeneralButtons(from);
+    return;
+  }
+
+  if (replyId === "welcome_watch") {
+    await sendText(from, `📺 *Watch & Listen — NaijaScope Media*\n\nFor video reports, live coverage and media content, visit:\n\n🔗 https://www.bayelsamedia.com.ng\n\nAll our multimedia content is available on the website.`);
+    await sendPostGeneralButtons(from);
+    return;
+  }
+
+  if (replyId === "welcome_opinion") {
+    track(from, "opinion");
+    trackCategoryRead(from, "politics").catch(() => {});
+    const opinionItems = await getNewsByCategory("politics").catch(() => items.slice(0, 5));
+    await sendNewsItems(from, opinionItems.slice(0, 5), "💬 Opinion & Analysis:", userRow);
+    await sendPostNewsButtons(from);
+    return;
+  }
+
+  if (replyId === "welcome_about") {
+    await sendText(from,
+      `ℹ️ *About NaijaScope Media*\n\nNaijaScope Media is a digital news intelligence platform dedicated to delivering credible, real-time news from Bayelsa State, the Niger Delta region, and across Nigeria.\n\nWe cover politics, oil & gas, crime, environment, sports, entertainment and more — powered by AI and driven by journalism.\n\n🌐 www.bayelsamedia.com.ng\n📧 admin@bayelsamedia.com.ng\n\nOur mission: *Inform. Engage. Empower.*`
+    );
+    await sendPostGeneralButtons(from);
+    return;
+  }
+
+  if (replyId === "welcome_contact") {
+    await sendText(from,
+      `📞 *Contact NaijaScope Media*\n\n🌐 Website: www.bayelsamedia.com.ng\n📧 Email: admin@bayelsamedia.com.ng\n\nFor news tips, press inquiries, advertising, or editorial matters — reach our team via email or visit the website.\n\nTo submit an anonymous tip right here, type *tip*.`
+    );
+    await sendPostGeneralButtons(from);
+    return;
+  }
+
+  if (replyId === "welcome_website") {
+    await sendText(from, `🌐 *Visit NaijaScope Media*\n\nFor full coverage, in-depth reports, and multimedia content:\n\n👉 https://www.bayelsamedia.com.ng`);
+    await sendPostGeneralButtons(from);
+    return;
+  }
+
+  // ── 3c. Post-response navigation button handlers ──────────────────────────────
+  if (replyId === "nav_more_headlines") {
+    track(from, "news");
+    trackCategoryRead(from, "politics").catch(() => {});
+    await sendNewsItems(from, items.slice(0, 5), "📰 Latest Headlines:", userRow);
+    await sendPostNewsButtons(from);
+    return;
+  }
+
+  if (replyId === "nav_search_topic" || replyId === "nav_search_news") {
+    await sendText(from, "🔍 What topic would you like to search for?\n\nJust type your keyword — e.g. *Tinubu*, *NDDC*, *oil spill*, *Super Eagles*");
+    return;
+  }
+
+  if (replyId === "nav_visit_website") {
+    await sendText(from, `🌐 *NaijaScope Media — Full Coverage*\n\n👉 https://www.bayelsamedia.com.ng`);
+    return;
+  }
+
+  if (replyId === "nav_back_menu") {
+    await sendMainMenu(from, userRow);
     return;
   }
 }
