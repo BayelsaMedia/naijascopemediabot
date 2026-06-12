@@ -2,7 +2,7 @@ services:
   - type: web
     name: naijascope-media-bot
     env: node
-    rootDir: artifacts/api-server
+    rootDir: naijascopemediabot
     buildCommand: npm install
     startCommand: node index.js
     envVars:
@@ -16,5 +16,9 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: DATABASE_URL
+        sync: false
       - key: ADMIN_NUMBER
+        sync: false
+      - key: WHATSAPP_APP_SECRET
         sync: false

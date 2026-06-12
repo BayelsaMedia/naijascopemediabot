@@ -33,18 +33,20 @@ import { startEveningWrapUpJob } from "./src/jobs/eveningWrapUp.js";
 
 const app = express();
 
+// ── Body parsing — store raw buffer for HMAC verification ─────────────────────
+// The verify callback stores the raw body without throwing.
+// Signature check is done in the route itself so we control the exact response.
 app.use(express.json({
-  verify: (req, res, buf) => {
-    if (req.path === "/webhook" && req.method === "POST") {
-      verifyWebhookSignature(req, res, buf);
-    }
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
   },
 }));
 
-// ── Health & verification ──────────────────────────────────────────────────────
+// ── Health & keep-alive endpoints ──────────────────────────────────────────────
 app.get("/",       (_req, res) => res.status(200).json({ status: "ok", service: "NaijaScope Media Bot", version: "2.0.0" }));
 app.get("/health", (_req, res) => res.status(200).json({ status: "ok", ts: new Date().toISOString() }));
 
+// ── Meta webhook verification (GET) ───────────────────────────────────────────
 app.get("/webhook", (req, res) => {
   const { "hub.mode": mode, "hub.verify_token": token, "hub.challenge": challenge } = req.query;
   if (mode === "subscribe" && token === process.env.VERIFY_TOKEN) {
@@ -55,16 +57,30 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// ── Webhook handler ───────────────────────────────────────────────────────────
+// ── Webhook handler (POST) ────────────────────────────────────────────────────
 app.post("/webhook", (req, res) => {
+  // Signature check — returns false on failure, undefined when skipped (dev mode)
+  const sigResult = verifyWebhookSignature(req);
+  if (sigResult === false) {
+    logger.warn("[WEBHOOK] Rejected — invalid or missing signature");
+    return res.status(401).json({ error: "Invalid or missing webhook signature" });
+  }
+
   res.sendStatus(200); // respond immediately; all processing is async
 
   const reqId = crypto.randomBytes(4).toString("hex");
   withCorrelationId(reqId, async () => {
     try {
-      const body    = req.body;
+      const body = req.body;
       if (!body || body.object !== "whatsapp_business_account") return;
-      const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+      const value = body.entry?.[0]?.changes?.[0]?.value;
+      if (!value) return;
+
+      // Skip delivery / read status updates — they carry `statuses`, not `messages`
+      if (value.statuses && !value.messages) return;
+
+      const message = value.messages?.[0];
       if (!message) return;
 
       const from      = message.from;
@@ -77,13 +93,20 @@ app.post("/webhook", (req, res) => {
       incrementMessageCount(from).catch(() => {});
       logger.info(`[MSG] from=${from} type=${message.type}`);
 
-      // ── Journalist handoff: bot paused for this user ──────────────────────
-      const openTicket = await getOpenTicket(from);
+      // ── Journalist handoff check ──────────────────────────────────────────
+      // Wrapped in try/catch — a missing support_tickets table must not block everyone.
+      let openTicket = null;
+      try {
+        openTicket = await getOpenTicket(from);
+      } catch (err) {
+        logger.warn("[WEBHOOK] getOpenTicket failed (non-fatal):", err.message);
+      }
+
       if (openTicket && message.type === "text") {
         const txt = message.text?.body?.trim().toLowerCase() || "";
         if (txt === "menu" || txt === "resume" || txt === "bot") {
           await closeTicket(openTicket.reference_code);
-          await sendText(from, "✅ Bot reactivated! Welcome back. 🤖");
+          await sendText(from, "✅ Bot reactivated. Welcome back. 🤖");
           await sendMainMenu(from);
         } else {
           await sendText(from, `🎙️ You're connected to our journalist team (Ref: ${openTicket.reference_code}).\n\nReply "menu" to return to the bot.`);
@@ -91,9 +114,33 @@ app.post("/webhook", (req, res) => {
         return;
       }
 
-      // Detect new vs returning user before upsert
-      const existingUser = await getUser(from);
-      const userRow      = await upsertUser(from);
+      // ── Database — wrapped so DB outages never silence the bot ────────────
+      let existingUser = null;
+      let userRow      = null;
+      let dbAvailable  = true;
+
+      try {
+        existingUser = await getUser(from);
+        userRow      = await upsertUser(from);
+      } catch (err) {
+        logger.error("[WEBHOOK] DB error for", from, "—", err.message);
+        dbAvailable = false;
+      }
+
+      // ── New user: send onboarding immediately, before any other routing ────
+      // This check is here — before the interactive/media/text branches — so that
+      // a new user's very first message (of any type) always triggers the welcome.
+      if (dbAvailable && !existingUser && !onboardingPending.has(from)) {
+        onboardingPending.add(from);
+        await sendOnboardingWelcome(from);
+        return;
+      }
+
+      // ── DB completely down — give a friendly retry notice ─────────────────
+      if (!dbAvailable) {
+        await sendText(from, "We're experiencing a short technical issue. Please send your message again in a moment — we'll be right back. 🙏");
+        return;
+      }
 
       // ── Interactive (button / list) replies ──────────────────────────────
       if (message.type === "interactive") {
@@ -102,7 +149,7 @@ app.post("/webhook", (req, res) => {
         return;
       }
 
-      // ── Non-text media (location, image, audio) ───────────────────────────
+      // ── Non-text media ────────────────────────────────────────────────────
       if (message.type !== "text") {
         await handleMedia(from, message, userRow);
         return;
@@ -120,7 +167,7 @@ app.post("/webhook", (req, res) => {
       if (awaitingTeamName.has(from)) {
         awaitingTeamName.delete(from);
         await subscribeToTeam(from, rawText);
-        await sendText(from, `⚡ Subscribed to ${rawText} alerts! You'll get match updates as they happen ⚽`);
+        await sendText(from, `⚡ Subscribed to ${rawText} alerts! You'll get match updates as they happen. ⚽`);
         return;
       }
 
@@ -143,14 +190,7 @@ app.post("/webhook", (req, res) => {
         if (handled) return;
       }
 
-      // ── First-time user: personalized onboarding ──────────────────────────
-      if (!existingUser) {
-        onboardingPending.add(from);
-        await sendOnboardingWelcome(from);
-        return;
-      }
-
-      // Users who received the onboarding picker but typed instead of tapping
+      // ── Users who received the onboarding picker but typed instead of tapping
       if (onboardingPending.has(from)) {
         await sendText(from, "👆 Tap one of the options above to pick your interest — or type 'menu' to jump straight in!");
         return;

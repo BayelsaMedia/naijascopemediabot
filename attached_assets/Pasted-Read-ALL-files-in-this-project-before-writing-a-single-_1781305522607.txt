@@ -1,0 +1,28 @@
+Read ALL files in this project before writing a single line of code. Understand the full codebase structure, the existing webhook handler, database schema, message-sending utilities, session management, and Grok API integration. Do not begin any implementation until you have confirmed you understand every file.
+
+The following components must NOT be modified under any circumstances unless I use the unlock phrase "UNLOCK: [component name]" in a follow-up message:
+
+
+Environment variable names and structure (.env keys)
+Meta WhatsApp Cloud API webhook verification route and token logic
+The UptimeRobot keep-alive endpoint
+Database connection configuration
+Existing working Paystack or any payment-related code (if present)
+
+
+
+SECTION 1 — CRITICAL BUG FIX: NEW USER NON-RESPONSE
+
+Problem: The bot is not replying to messages from new or unknown users.
+
+Investigate and fix the following potential causes:
+
+
+Session guard bug: If the webhook handler checks for an existing user record in the database before deciding whether to process a message, fix it so that ALL incoming messages — from both new and existing users — are processed. New users should have a session record automatically created on first contact.
+Entry point message type filtering: If the main message handler only processes certain message types (e.g., text) and silently drops others, fix it to handle text, interactive, image, audio, video, document, location, and sticker types gracefully. Non-text types should return a professional text response rather than being dropped.
+Database upsert on first message: On every incoming message, upsert the user's record (phone number, name from WhatsApp profile if available, first_seen timestamp, last_seen timestamp). This must happen BEFORE any session check, so no user is ever turned away due to a missing record.
+Webhook payload parsing edge cases: Confirm the webhook handler correctly handles the WhatsApp Cloud API payload structure for all incoming message events, including the value.messages array check and status update filtering (do not process status update objects as messages).
+Async/await chain errors: Audit the entire incoming message handler for unhandled promise rejections or try/catch gaps that could silently fail on new users.
+
+
+After fixing, every user — new or returning — must always receive a response within 5 seconds of sending a message.

@@ -2,17 +2,22 @@ import crypto from "crypto";
 
 /**
  * Verify Meta's HMAC-SHA256 webhook signature.
- * Rejects requests with missing or mismatched signatures.
- * If WHATSAPP_APP_SECRET is unset (dev mode), verification is skipped.
+ * Returns false if verification fails, true if it passes, undefined if skipped (dev mode).
+ * Does NOT send any HTTP response or throw — the caller handles the response.
+ * If WHATSAPP_APP_SECRET is unset (dev mode), verification is skipped (returns undefined).
  */
-export function verifyWebhookSignature(req, res, buf) {
+export function verifyWebhookSignature(req) {
   const secret = process.env.WHATSAPP_APP_SECRET;
-  if (!secret) return; // dev mode — skip
+  if (!secret) return undefined; // dev mode — skip
 
   const sig = req.headers["x-hub-signature-256"];
   if (!sig) {
-    res.status(401).json({ error: "Missing X-Hub-Signature-256 header" });
-    throw new Error("Missing X-Hub-Signature-256");
+    return false;
+  }
+
+  const buf = req.rawBody;
+  if (!buf) {
+    return false;
   }
 
   const expected = "sha256=" + crypto
@@ -20,7 +25,6 @@ export function verifyWebhookSignature(req, res, buf) {
     .update(buf)
     .digest("hex");
 
-  // timingSafeEqual requires equal-length buffers — guard explicitly
   const sigBuf      = Buffer.from(sig);
   const expectedBuf = Buffer.from(expected);
 
@@ -28,15 +32,15 @@ export function verifyWebhookSignature(req, res, buf) {
     sigBuf.length !== expectedBuf.length ||
     !crypto.timingSafeEqual(sigBuf, expectedBuf)
   ) {
-    res.status(401).json({ error: "Invalid webhook signature" });
-    throw new Error("Webhook signature mismatch");
+    return false;
   }
+
+  return true;
 }
 
 /**
  * Sanitize user text input.
  * Strips control characters and truncates to a safe length.
- * WhatsApp is not a browser context — HTML-encoding is not applied.
  */
 export function sanitizeInput(text, maxLength = 1_000) {
   if (typeof text !== "string") return "";
