@@ -110,6 +110,17 @@ export async function handleAdmin(from, rawText) {
   return false; // not an admin command
 }
 
+/**
+ * 2c. Admin authentication — verified exclusively by phone number from the webhook payload.
+ * Supports a comma-separated ADMIN_PHONE_NUMBERS env var (preferred) or the legacy
+ * single-number ADMIN_NUMBER env var. Message content is NEVER used for verification.
+ */
 export function isAdmin(from) {
+  const multiList = process.env.ADMIN_PHONE_NUMBERS;
+  if (multiList) {
+    const approved = multiList.split(",").map(n => n.trim()).filter(Boolean);
+    return approved.includes(from);
+  }
+  // Legacy fallback
   return !!(process.env.ADMIN_NUMBER && from === process.env.ADMIN_NUMBER);
 }

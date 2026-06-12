@@ -11,13 +11,67 @@ export function trackMessageId(id) {
   return true;
 }
 
-// ── Per-user rate limiting ────────────────────────────────────────────────────
+// ── Per-user rate limiting (AI / voice — simple cooldown) ────────────────────
 const rateLimit = new Map();
 
 export function checkRateLimit(userId) {
   const last = rateLimit.get(userId);
   if (last && Date.now() - last < RATE_LIMIT_MS) return false;
   rateLimit.set(userId, Date.now());
+  return true;
+}
+
+// ── 2d. Sliding-window rate limit: max 20 responses per 10 minutes ────────────
+const WINDOW_MS       = 10 * 60 * 1_000; // 10 minutes
+const WINDOW_MAX      = 20;               // max responses per window
+const windowRateLimit = new Map();        // userId → number[]  (timestamps of recent responses)
+const windowWarnSent  = new Set();        // userId — we only send the warning once per block
+
+/**
+ * Record a response sent to this user and check if the window limit is exceeded.
+ * Returns true  → OK to respond.
+ * Returns false → limit exceeded; caller should drop silently (warning already sent once).
+ * Returns "warn" → limit just exceeded for the first time; caller should send the warning message.
+ */
+export function checkWindowRateLimit(userId) {
+  const now  = Date.now();
+  const timestamps = (windowRateLimit.get(userId) || []).filter(t => now - t < WINDOW_MS);
+
+  if (timestamps.length >= WINDOW_MAX) {
+    if (!windowWarnSent.has(userId)) {
+      windowWarnSent.add(userId);
+      return "warn";
+    }
+    return false;
+  }
+
+  timestamps.push(now);
+  windowRateLimit.set(userId, timestamps);
+  windowWarnSent.delete(userId); // reset warn flag when window clears
+  return true;
+}
+
+// ── 2f. 24-hour session suspension (harmful content) ─────────────────────────
+const suspendedUsers = new Map(); // userId → expiry timestamp (ms)
+
+/**
+ * Suspend a user for 24 hours.
+ */
+export function suspendUser(userId) {
+  suspendedUsers.set(userId, Date.now() + 24 * 60 * 60 * 1_000);
+}
+
+/**
+ * Check if a user is currently suspended.
+ * Auto-clears expired suspensions.
+ */
+export function isUserSuspended(userId) {
+  const expiry = suspendedUsers.get(userId);
+  if (!expiry) return false;
+  if (Date.now() >= expiry) {
+    suspendedUsers.delete(userId);
+    return false;
+  }
   return true;
 }
 

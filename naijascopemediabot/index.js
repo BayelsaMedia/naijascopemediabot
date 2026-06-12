@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "crypto";
 
-import { verifyWebhookSignature, sanitizeInput, isValidPhone } from "./src/middleware/security.js";
+import { verifyWebhookSignature, sanitizeInput, isValidPhone, detectImpersonation, detectPromptInjection, detectHarmfulContent } from "./src/middleware/security.js";
 import { sendText, markAsRead } from "./src/services/whatsappService.js";
 import { sendMainMenu, sendReturnMenu } from "./src/whatsapp/menus.js";
 import { sendOnboardingWelcome } from "./src/whatsapp/onboarding.js";
@@ -14,6 +14,7 @@ import {
   tipsInProgress, reportsInProgress,
   awaitingTeamName, awaitingFactCheck, awaitingHandoff,
   onboardingPending,
+  checkWindowRateLimit, suspendUser, isUserSuspended,
 } from "./src/state/sessionState.js";
 import { handleInteractive } from "./src/handlers/interactiveHandler.js";
 import { handleText, runTipFlow, runReportFlow } from "./src/handlers/textHandler.js";
@@ -89,6 +90,23 @@ app.post("/webhook", (req, res) => {
       if (!trackMessageId(messageId)) return; // dedup
 
       await markAsRead(messageId);
+
+      // ── 2f. Suspended users — silently drop all messages ─────────────────
+      if (isUserSuspended(from)) {
+        logger.info(`[SECURITY] Dropped message from suspended user: ${from}`);
+        return;
+      }
+
+      // ── 2d. Sliding-window rate limit (20 responses / 10 min) ────────────
+      const windowResult = checkWindowRateLimit(from);
+      if (windowResult === "warn") {
+        await sendText(from, "You have sent an unusually high number of messages. Please wait a few minutes before continuing.");
+        return;
+      }
+      if (windowResult === false) {
+        return; // silently drop — warning already sent
+      }
+
       track(from, null);
       incrementMessageCount(from).catch(() => {});
       logger.info(`[MSG] from=${from} type=${message.type}`);
@@ -159,6 +177,38 @@ app.post("/webhook", (req, res) => {
       const rawText = sanitizeInput(message.text.body, 2_000);
       if (!rawText) return;
       const text = rawText.toLowerCase().trim();
+
+      // ── 2f. Harmful content filter ────────────────────────────────────────
+      if (detectHarmfulContent(rawText)) {
+        logger.warn(`[SECURITY] Harmful content detected from ${from} — suspending 24h`);
+        suspendUser(from);
+        await sendText(from,
+          "NaijaScope Media is committed to maintaining a respectful and safe communication environment. " +
+          "This conversation has been flagged. Please refer to our community guidelines at www.bayelsamedia.com.ng."
+        );
+        return;
+      }
+
+      // ── 2b. Prompt injection / jailbreak filter ───────────────────────────
+      if (detectPromptInjection(rawText)) {
+        logger.warn(`[SECURITY] Prompt injection attempt from ${from}`);
+        await sendText(from,
+          "I'm here to assist with news, information, and media updates from NaijaScope Media. How can I help you today?"
+        );
+        return;
+      }
+
+      // ── 2a. Identity / impersonation claim filter ─────────────────────────
+      // Must NOT be an admin — admins are verified by phone number, not text.
+      if (!isAdmin(from) && detectImpersonation(rawText)) {
+        logger.warn(`[SECURITY] Impersonation attempt from ${from}: ${rawText.slice(0, 80)}`);
+        await sendText(from,
+          "Thank you for reaching out to NaijaScope Media. For verified staff communication, all internal " +
+          "operations are conducted through official channels. This chatbot is a public-facing service and " +
+          "cannot process identity verification requests. Please visit www.bayelsamedia.com.ng for contact details."
+        );
+        return;
+      }
 
       // ── Active multi-step flows ───────────────────────────────────────────
       if (tipsInProgress.has(from))    { await runTipFlow(from, text, rawText);  return; }

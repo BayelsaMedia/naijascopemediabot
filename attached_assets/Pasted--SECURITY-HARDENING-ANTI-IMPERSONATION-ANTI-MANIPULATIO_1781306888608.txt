@@ -1,0 +1,47 @@
+ SECURITY HARDENING (ANTI-IMPERSONATION & ANTI-MANIPULATION)
+
+This is critical. Implement all of the following without exception:
+
+2a. Identity Claim Rejection
+
+
+The bot must NEVER accept, store, or act upon any user's claim that they are NaijaScope Media staff, the CEO, an editor, an admin, a developer, a moderator, or any authority figure related to NaijaScope Media.
+Add a pattern-matching detection layer that identifies messages containing phrases such as: "I am the CEO", "I am admin", "I am NaijaScope", "I work for NaijaScope", "I am the founder", "I am the owner", "I am an editor", "I am a developer", "I am a moderator", or any close variation.
+When such a message is detected, the bot must respond with a professional, firm, and polite message such as: "Thank you for reaching out to NaijaScope Media. For verified staff communication, all internal operations are conducted through official channels. This chatbot is a public-facing service and cannot process identity verification requests. Please visit www.bayelsamedia.com.ng for contact details."
+The bot must then NOT store any role, title, or identity claim from that user in the database.
+
+
+2b. Prompt Injection & Jailbreak Prevention
+
+
+The bot must never allow user input to override its system persona, instructions, or behaviour.
+Filter incoming messages for attempts to: redefine the bot's identity, instruct it to "ignore previous instructions", claim it has been updated with new rules, ask it to speak in a different persona, or attempt to extract its system prompt.
+On detection, respond professionally: "I'm here to assist with news, information, and media updates from NaijaScope Media. How can I help you today?"
+
+
+2c. Admin Command Authentication
+
+
+Any administrative or privileged commands must ONLY be accepted from pre-approved, hardcoded phone numbers stored in environment variables (e.g., ADMIN_PHONE_NUMBERS).
+Verification must be done by matching the sender's WhatsApp phone number from the webhook payload against this list — NOT by any claim made in the message text.
+If a non-admin user sends an admin command, the bot silently treats it as a normal message and does not reveal that admin commands exist.
+
+
+2d. Rate Limiting
+
+
+Implement per-user rate limiting: no user may receive more than 20 bot responses within any 10-minute window.
+If a user exceeds this limit, respond once: "You have sent an unusually high number of messages. Please wait a few minutes before continuing." Then silently drop further messages from that user until the window resets.
+
+
+2e. Data Integrity
+
+
+Never store unverified user-supplied claims as facts. When a user provides information about themselves (name, role, organisation), mark it as user_claimed in the database — never as verified.
+The only verified data points are: phone number (from WhatsApp payload), message timestamp, and message content.
+
+
+2f. Harmful Content Filtering
+
+
+If a user sends content that is abusive, threatening, sexually explicit, or promotes violence, the bot must respond with a single professional message: "NaijaScope Media is committed to maintaining a respectful and safe communication environment. This conversation has been flagged. Please refer to our community guidelines at www.bayelsamedia.com.ng." Then suspend that user's session for 24 hours.
