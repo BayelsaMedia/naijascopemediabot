@@ -248,7 +248,7 @@ app.post("/webhook", (req, res) => {
       if (detectPromptInjection(rawText)) {
         logger.warn(`[SECURITY] Prompt injection attempt from ${from}`);
         await sendText(from,
-          "I'm here to assist with news, information, and media updates from NaijaScope Media. How can I help you today?"
+          "I am the NaijaScope Media Intelligence Bot. I am here to provide news intelligence and assist with NaijaScope Media's content. How may I assist you today?"
         );
         return;
       }

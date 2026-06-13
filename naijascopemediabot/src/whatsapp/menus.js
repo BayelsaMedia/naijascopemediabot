@@ -63,16 +63,16 @@ export async function sendReturnMenu(to, newCount = 0, topCategories = []) {
   let body;
   if (newCount > 0 && topCategories.length > 0) {
     const cats = topCategories.slice(0, 2).map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(" and ");
-    body = `👋 Welcome back!\n\n${newCount} new stories dropped since your last visit — the big themes: *${cats}*.\n\nWhat would you like?`;
+    body = `Welcome back to NaijaScope Media.\n\n${newCount} new ${newCount === 1 ? "story has" : "stories have"} been published since your last visit. The leading themes are ${cats}.\n\nHow may I assist you?`;
   } else if (newCount > 0) {
-    body = `👋 Welcome back!\n\n${newCount} new stories are waiting for you. Let's catch you up.`;
+    body = `Welcome back to NaijaScope Media.\n\n${newCount} new ${newCount === 1 ? "story is" : "stories are"} available since your last visit. Select an option below to continue.`;
   } else {
-    body = `👋 Good to have you back. You're all caught up — here's what's happening now.`;
+    body = `Welcome back to NaijaScope Media. You are fully up to date. Select an option below to explore the latest coverage.`;
   }
   await sendButtons(to, body, [
-    { id: "menu_headlines", title: "📰 New Stories"     },
-    { id: "menu_football",  title: "⚽ Football Update" },
-    { id: "main_menu",      title: "🏠 Full Menu"       },
+    { id: "menu_headlines", title: "New Stories"      },
+    { id: "menu_football",  title: "Football Update"  },
+    { id: "main_menu",      title: "Full Menu"        },
   ]);
 }
 
@@ -155,16 +155,16 @@ export async function sendFootballMenu(to) {
 export async function sendLanguageMenu(to) {
   await sendList(
     to,
-    "🌍 Choose your language.\nAll news and AI responses will be delivered in your chosen language.",
+    "Select your preferred language. All news briefings and responses will be delivered in your chosen language.",
     "Choose Language",
     [{
       title: "Available Languages",
       rows: [
-        { id: "lang_en",     title: "English",         description: "Standard English"    },
-        { id: "lang_pidgin", title: "Nigerian Pidgin",  description: "Na so e be!"         },
-        { id: "lang_ig",     title: "Igbo",             description: "Ọ dị mma"            },
-        { id: "lang_yo",     title: "Yoruba",           description: "Ẹ káàárọ̀"           },
-        { id: "lang_ha",     title: "Hausa",            description: "Sannu da zuwa"       },
+        { id: "lang_en",     title: "English",         description: "Formal British English (default)"    },
+        { id: "lang_pidgin", title: "Nigerian Pidgin",  description: "Nigerian Pidgin English"             },
+        { id: "lang_ig",     title: "Igbo",             description: "Igbo language"                       },
+        { id: "lang_yo",     title: "Yoruba",           description: "Yoruba language"                     },
+        { id: "lang_ha",     title: "Hausa",            description: "Hausa language"                      },
       ],
     }]
   );
