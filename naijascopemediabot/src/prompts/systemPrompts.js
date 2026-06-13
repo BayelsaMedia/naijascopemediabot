@@ -71,6 +71,15 @@ export const PROMPT_TRANSLATE = (lang) =>
 
 export const PROMPT_PIDGIN_TRANSLATE = PROMPT_TRANSLATE("Nigerian Pidgin English");
 
+// ── Supported language display names ─────────────────────────────────────────
+export const LANG_NAMES = {
+  en:     "English",
+  ig:     "Igbo",
+  yo:     "Yoruba",
+  ha:     "Hausa",
+  pidgin: "Pidgin",
+};
+
 // ── Voice intent extraction sub-prompt ───────────────────────────────────────
 export const PROMPT_VOICE_INTENT = `You are analysing a voice note transcription from a WhatsApp user of NaijaScope Media.
 Extract their intent in one word or short phrase from this list: news, football, weather, markets, subscribe, factcheck, help, tip, report, language, ai.
