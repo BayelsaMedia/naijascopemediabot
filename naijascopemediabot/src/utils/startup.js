@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname     = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql", "003_opt_out.sql", "004_admin_features.sql"];
+const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql", "003_opt_out.sql", "004_admin_features.sql", "005_search_and_stats.sql"];
 const MIGRATION_DIR = path.join(__dirname, "../../migrations");
 
 const REQUIRED_VARS = [

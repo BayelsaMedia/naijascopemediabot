@@ -1,0 +1,358 @@
+Admin Command: /subscribers
+
+Purpose: View live subscriber and user metrics directly from WhatsApp.
+
+Commands:
+
+/subscribers — Returns a quick overview:
+
+👥 SUBSCRIBER METRICS — NaijaScope Media
+━━━━━━━━━━━━━━━━━━━━━━━━
+Total Registered Users: [X]
+Active (Last 7 Days): [X]
+Active (Last 30 Days): [X]
+Opted-Out Users: [X]
+New Users Today: [X]
+New Users This Week: [X]
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+Followed by reply buttons: "Detailed Report" | "Segment View" | "Admin Menu"
+
+/subscribers detailed — Returns extended breakdown:
+
+📈 DETAILED USER ANALYTICS
+━━━━━━━━━━━━━━━━━━━━━━━━
+ENGAGEMENT
+Messages Processed Today: [X]
+Messages This Week: [X]
+Messages This Month: [X]
+Avg. Messages Per User (30 Days): [X]
+
+GROWTH
+New Users This Month: [X]
+Retention Rate (30-Day): [X]%
+Churn (Opted-Out This Month): [X]
+
+LANGUAGE PREFERENCES
+English: [X] users
+Igbo: [X] users
+Yoruba: [X] users
+
+BOT HEALTH
+Avg. Response Time: [X]ms
+Grok API Success Rate: [X]%
+Failed Deliveries (Today): [X]
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+MODULE B — SEARCH NEWS FLOW
+
+Overview
+
+Build a complete, end-to-end search experience allowing users to query NaijaScope Media's RSS feed by keyword, receive contextually filtered results, and navigate naturally using interactive buttons. The search must be persistent-session-aware (the bot remembers the user is in search mode) and must handle all edge cases gracefully.
+
+
+B1. Search Entry Points
+
+The search flow is triggered by ANY of the following:
+
+
+User selects "Search News" from the interactive welcome menu
+User sends the text "Search", "Find", "Look up", "Search news", or "Find news" (case-insensitive)
+User sends /search [keyword] directly (skips the prompt step and goes straight to results)
+Admin sends /search for internal testing
+
+
+
+B2. Search Session State
+
+Implement a search_session state per user stored in the database (or in-memory session store). This state persists for 3 minutes after the last search interaction. States:
+
+
+idle — User is not in a search flow
+awaiting_keyword — Bot has prompted the user and is waiting for their search keyword
+results_displayed — Results have been shown; bot is awaiting a follow-up action
+awaiting_next_page — User has requested "Next 5" and bot is preparing the next result set
+
+
+
+B3. Search Flow — Step by Step
+
+Step 1 — Prompt
+When triggered (without a keyword), bot sends:
+"What topic or keyword would you like to search for? Enter a word or phrase and NaijaScope Media will find the most relevant stories for you."
+Set user state to awaiting_keyword.
+
+Step 2 — Keyword capture & validation
+When the user responds while state is awaiting_keyword:
+
+
+Trim and sanitise the keyword (strip HTML, special characters, limit to 100 characters).
+If the keyword is empty, too short (under 2 characters), or contains only punctuation, respond: "Please enter a valid search term of at least two characters." and keep the state as awaiting_keyword.
+If the keyword passes validation, proceed to RSS fetch.
+
+
+Step 3 — RSS Fetch & Filtering
+
+
+Fetch the NaijaScope Media RSS feed from www.bayelsamedia.com.ng/rss (or the correct RSS endpoint — check the codebase for any existing RSS configuration; if none exists, use the standard WordPress RSS endpoint: www.bayelsamedia.com.ng/feed).
+Parse the feed using the rss-parser npm package.
+Filter items where the keyword appears (case-insensitive, partial match) in ANY of: title, contentSnippet, categories, or creator.
+Rank results: items where the keyword appears in the title rank higher than those where it only appears in the body.
+Store the full matched result set in the user's session (not just the first page) so pagination works without re-fetching the RSS feed.
+
+
+Step 4 — Results Display
+
+If results are found, send Page 1 (first 4 results) in this format:
+
+🔍 SEARCH RESULTS — "[Keyword]"
+NaijaScope Media found [X] matching stories.
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. [Article Title]
+   [1-sentence excerpt — max 120 characters]
+   🔗 [Full article URL]
+
+2. [Article Title]
+   [1-sentence excerpt — max 120 characters]
+   🔗 [Full article URL]
+
+3. [Article Title]
+   [1-sentence excerpt — max 120 characters]
+   🔗 [Full article URL]
+
+4. [Article Title]
+   [1-sentence excerpt — max 120 characters]
+   🔗 [Full article URL]
+━━━━━━━━━━━━━━━━━━━━━━━━
+For full coverage, visit www.bayelsamedia.com.ng
+
+Follow with reply buttons:
+
+
+If more than 4 results exist: "Next 4 Results" | "New Search" | "Main Menu"
+If 4 or fewer results: "New Search" | "Main Menu" | "Visit Website"
+
+
+If NO results are found:
+"No stories were found matching '[keyword]'. This may be a topic we have not yet covered, or the term may be too specific. Try a broader keyword, or visit www.bayelsamedia.com.ng to browse all our coverage."
+Reply buttons: "Try Again" | "Browse Headlines" | "Main Menu"
+
+Step 5 — Pagination
+When the user taps "Next 4 Results":
+
+
+Retrieve the stored result set from session.
+Display the next page of 4 results in the same format.
+Update the session's page_index.
+When the last page is reached, replace "Next 4 Results" with "Back to Start" button.
+
+
+Step 6 — Search History
+
+
+Store each user's last 5 unique searches in the database (table: search_history, columns: user_id, keyword, searched_at, result_count).
+Implement a /mySearches command (user-facing) that returns the user's 5 most recent searches as tappable list items — tapping one re-runs that search.
+
+
+
+B4. Trending Topics (Admin-Viewable)
+
+
+Track keyword frequency across all users in a search_analytics table (keyword, search_count, last_searched_at).
+Add /trending to the admin command set, returning the top 10 most searched keywords in the last 7 days:
+
+
+🔥 TRENDING SEARCHES — Last 7 Days
+━━━━━━━━━━━━━━━━━━━━━━━━
+1. [Keyword] — [X] searches
+2. [Keyword] — [X] searches
+...
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+B5. Search Edge Cases
+
+
+RSS feed unavailable: If the feed fetch fails or times out (use a 5-second timeout), respond: "NaijaScope Media's search service is temporarily unavailable. Please visit www.bayelsamedia.com.ng directly to find the story you are looking for." Reset user state to idle.
+Extremely long keyword: Truncate to 100 characters with no notification to the user — simply search the truncated term.
+Keyword with only stop words (e.g., "the", "and", "is"): Respond: "Your search term is too general. Please try a more specific keyword, such as a person's name, a location, or a topic."
+User abandons search mid-flow: If the user sends a greeting or menu trigger while in awaiting_keyword state, cancel the search, reset state to idle, and serve the welcome menu.
+Duplicate keyword search: If the user searches the same keyword twice in a row within 2 minutes, respond with the same results from the in-session cache without re-fetching the RSS feed.
+Malicious keyword injection: Sanitise all keyword input to prevent any XSS or injection patterns from being stored or passed to external systems.
+
+
+
+MODULE C — ADMIN STATS COMMAND (/stats)
+
+Overview
+
+Build a comprehensive admin-only intelligence dashboard accessible via a single WhatsApp command. This command must surface the bot's full security posture, user behaviour, and health metrics in a clean, formatted, text-based dashboard — directly in WhatsApp.
+
+
+C1. Command Structure
+
+/stats — Returns the complete dashboard (see C2 below)
+/stats security — Returns only the security/flag section
+/stats users — Returns only the user metrics section
+/stats health — Returns only the bot health section
+/stats export — Returns a full plain-text summary formatted for copying or forwarding
+
+
+C2. Full /stats Dashboard Output
+
+📊 NAIJASCOPE BOT INTELLIGENCE DASHBOARD
+Generated: [DD/MM/YYYY HH:MM WAT]
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+🛡️ SECURITY & FLAGS
+Impersonation Attempts (All Time): [X]
+Impersonation Attempts (Today): [X]
+Prompt Injection Attempts (All Time): [X]
+Prompt Injection Attempts (Today): [X]
+Harmful Content Flags (All Time): [X]
+Harmful Content Flags (Today): [X]
+Admin Probe Attempts (Unauthorised): [X]
+Total Unique Flagged Users: [X]
+Currently Suspended Users: [X]
+Suspensions Expiring in 24hrs: [X]
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+👥 USER METRICS
+Total Registered Users: [X]
+Active (Last 24 Hours): [X]
+Active (Last 7 Days): [X]
+Active (Last 30 Days): [X]
+Opted-Out Users: [X]
+New Users Today: [X]
+New Users This Week: [X]
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 SEARCH INTELLIGENCE
+Total Searches (All Time): [X]
+Searches Today: [X]
+Top Keyword Today: [Keyword] ([X] searches)
+Top Keyword This Week: [Keyword] ([X] searches)
+Zero-Result Searches (Today): [X]
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+📡 BROADCAST HISTORY
+Total Broadcasts Sent: [X]
+Last Broadcast: [DD/MM/YYYY HH:MM]
+Last Broadcast Reach: [X] recipients
+Scheduled Broadcasts Pending: [X]
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🤖 BOT HEALTH
+Server Uptime: [X] days [X] hours
+Avg. Response Time (Last 1hr): [X]ms
+Grok API Success Rate (Today): [X]%
+Grok API Failures (Today): [X]
+WhatsApp API Errors (Today): [X]
+Webhook Events Processed (Today): [X]
+Duplicate Webhooks Blocked (Today): [X]
+Breaking News Mode: [ACTIVE / INACTIVE]
+Breaking Mode Since: [Timestamp or N/A]
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+📋 PROMISE TRACKER
+Total Promises Logged: [X]
+Kept: [X] | Broken: [X] | Pending: [X]
+Last Entry Added: [DD/MM/YYYY]
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+Followed by admin reply buttons: "Security Detail" | "Broadcast" | "Admin Menu"
+
+
+C3. Suspended Users Detail (/stats security)
+
+When admin requests the security sub-report:
+
+🛡️ SECURITY DETAIL REPORT
+━━━━━━━━━━━━━━━━━━━━━━━━
+CURRENTLY SUSPENDED USERS: [X]
+
+[For each suspended user — show max 10:]
+User #[hashed_id]
+Flag Type: [Impersonation / Injection / Harmful]
+Flagged: [DD/MM/YYYY HH:MM]
+Suspension Expires: [DD/MM/YYYY HH:MM]
+Offending Message Preview: [First 60 chars]...
+━━━━━━━━━━━━━━━━━━
+
+Followed by admin reply buttons: "Lift All Suspensions" | "Extend Suspensions" | "Back to Stats"
+
+
+C4. Admin Command: /unsuspend [user_id]
+
+Allows the admin to manually lift a suspension before its expiry:
+
+
+Bot confirms: "Suspension lifted for User #[ID]. They may now send messages again."
+Log the action with timestamp and admin phone hash.
+
+
+
+C5. Database Schema Additions for Stats (new tables only)
+
+sql-- Security event log
+CREATE TABLE IF NOT EXISTS security_events (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id),
+  event_type TEXT NOT NULL, -- 'impersonation', 'injection', 'harmful', 'admin_probe'
+  message_preview TEXT,
+  detected_at TIMESTAMP DEFAULT NOW(),
+  suspension_expires_at TIMESTAMP
+);
+
+-- Bot health metrics log (insert every 5 minutes via cron)
+CREATE TABLE IF NOT EXISTS health_metrics (
+  id SERIAL PRIMARY KEY,
+  recorded_at TIMESTAMP DEFAULT NOW(),
+  avg_response_ms INTEGER,
+  grok_success_count INTEGER,
+  grok_failure_count INTEGER,
+  wa_api_error_count INTEGER,
+  webhook_event_count INTEGER,
+  duplicate_blocked_count INTEGER
+);
+
+-- Search analytics
+CREATE TABLE IF NOT EXISTS search_analytics (
+  id SERIAL PRIMARY KEY,
+  keyword TEXT NOT NULL,
+  user_id INTEGER REFERENCES users(id),
+  result_count INTEGER,
+  searched_at TIMESTAMP DEFAULT NOW()
+);
+
+
+C6. Stats Command Edge Cases
+
+
+No data yet: If the bot has just been deployed and tables are empty, return: "Dashboard is active. Metrics will populate as the bot processes user interactions."
+Database query timeout: If any stats query takes more than 3 seconds, return partial results with a note: "Some metrics are still loading. Run /stats again in a moment for the complete report."
+Non-admin user sends /stats: Silently ignore and serve the standard menu. Do not confirm or deny that the command exists.
+
+
+
+CROSS-MODULE REQUIREMENTS
+
+These apply to all three modules above:
+
+
+Admin menu shortcut: When an admin sends /admin or /menu to the bot, send an interactive list of all admin commands with descriptions, grouped as:
+
+Broadcast & Alerts: /broadcast, /breaking
+Data & Tracking: /promise, /subscribers, /trending
+Intelligence & Security: /stats, /unsuspend
+
+
+
+All admin responses must use WAT (West Africa Time) for all timestamps. Convert all stored UTC timestamps before display.
+Every new database table must include migration-safe creation using CREATE TABLE IF NOT EXISTS — never CREATE TABLE alone.
+All three modules must fail silently to non-admin users — no error messages, no hints that the commands exist.
+All three modules must be fully operational without breaking any existing bot feature. After implementation, verify that the welcome menu, general AI responses, interactive buttons, security filters, language enforcement, and website referral logic all still function correctly.
+
+

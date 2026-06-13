@@ -68,6 +68,11 @@ export function isUserSuspended(userId) {
   return true;
 }
 
+// Lift a suspension manually (for /unsuspend command — Module C4)
+export function liftSuspension(userId) {
+  suspendedUsers.delete(userId);
+}
+
 // ── Opt-out state (in-memory cache; canonical state is in the DB) ─────────────
 const optedOutCache = new Set();   // users who have opted out
 const reEngageCache = new Set();   // users who have just re-engaged (do not re-send welcome twice)
@@ -133,6 +138,27 @@ export const analytics = {
   messagesPerDay: new Map(),
   commandCounts:  new Map(),
   peakHours:      new Array(24).fill(0),
+};
+
+// ── Module B: Search session state ────────────────────────────────────────────
+// Map<phone, { step, keyword, results, pageIndex, lastActivity, lastSearchedAt }>
+export const searchSessions   = new Map();
+// Temp Map for /mySearches interactive list (phone → keyword[])
+export const searchHistoryMenu = new Map();
+
+// ── Module C: Suspension detail registry (in-memory, for security reports) ────
+// Map<phone, { hash, eventType, messagePreview, suspendedAt, expiresAt }>
+export const suspensionDetails = new Map();
+
+// ── Module C: Bot health counters (reset daily; persisted by healthMetricsJob) ─
+export const botMetrics = {
+  startTime:              Date.now(),
+  grokSuccessToday:       0,
+  grokFailuresToday:      0,
+  waErrorsToday:          0,
+  duplicatesBlockedToday: 0,
+  webhookEventsToday:     0,
+  responseTimes:          [], // last 100 AI response times in ms
 };
 
 export function track(from, command) {

@@ -16,7 +16,11 @@ import {
   onboardingPending,
   checkWindowRateLimit, suspendUser, isUserSuspended,
   isOptedOut, markOptedOut, clearOptedOut,
+  searchSessions, botMetrics,
 } from "./src/state/sessionState.js";
+import { runSearchFlow } from "./src/services/searchService.js";
+import { logSecurityEvent, recordSuspension } from "./src/admin/securityLog.js";
+import { startHealthMetricsJob } from "./src/jobs/healthMetricsJob.js";
 import { handleInteractive } from "./src/handlers/interactiveHandler.js";
 import { handleText, runTipFlow, runReportFlow } from "./src/handlers/textHandler.js";
 import { handleMedia } from "./src/handlers/mediaHandler.js";
@@ -90,7 +94,7 @@ app.post("/webhook", (req, res) => {
       const from      = message.from;
       const messageId = message.id;
       if (!from || !messageId || !isValidPhone(from)) return;
-      if (!trackMessageId(messageId)) return; // dedup (Section 7.1)
+      if (!trackMessageId(messageId)) { botMetrics.duplicatesBlockedToday++; return; } // dedup (Section 7.1)
 
       // ── Section 7.3: Group message filtering ─────────────────────────────
       // Group JIDs in WhatsApp Cloud API end with @g.us or contain a group indicator.
@@ -124,6 +128,7 @@ app.post("/webhook", (req, res) => {
       }
 
       track(from, null);
+      botMetrics.webhookEventsToday++;
       incrementMessageCount(from).catch(() => {});
       logger.info(`[MSG] from=${from} type=${message.type}`);
 
@@ -239,6 +244,7 @@ app.post("/webhook", (req, res) => {
       if (detectHarmfulContent(rawText)) {
         logger.warn(`[SECURITY] Harmful content detected from ${from} — suspending 24h`);
         suspendUser(from);
+        recordSuspension(from, "harmful", rawText.slice(0, 60));
         await sendText(from,
           "NaijaScope Media is committed to maintaining a respectful and safe communication environment. " +
           "This conversation has been flagged. Please refer to our community guidelines at www.bayelsamedia.com.ng."
@@ -249,6 +255,7 @@ app.post("/webhook", (req, res) => {
       // ── 2b. Prompt injection / jailbreak filter ───────────────────────────
       if (detectPromptInjection(rawText)) {
         logger.warn(`[SECURITY] Prompt injection attempt from ${from}`);
+        logSecurityEvent(from, "injection", rawText.slice(0, 200)).catch(() => {});
         await sendText(from,
           "I am the NaijaScope Media Intelligence Bot. I am here to provide news intelligence and assist with NaijaScope Media's content. How may I assist you today?"
         );
@@ -259,6 +266,7 @@ app.post("/webhook", (req, res) => {
       // Must NOT be an admin — admins are verified by phone number, not text.
       if (!isAdmin(from) && detectImpersonation(rawText)) {
         logger.warn(`[SECURITY] Impersonation attempt from ${from}: ${rawText.slice(0, 80)}`);
+        logSecurityEvent(from, "impersonation", rawText.slice(0, 200)).catch(() => {});
         await sendText(from,
           "Thank you for reaching out to NaijaScope Media. For verified staff communication, all internal " +
           "operations are conducted through official channels. This chatbot is a public-facing service and " +
@@ -291,6 +299,12 @@ app.post("/webhook", (req, res) => {
         return;
       }
 
+      // ── Module B: Search session check ───────────────────────────────────
+      if (searchSessions.has(from) && searchSessions.get(from)?.step === "awaiting_keyword") {
+        await runSearchFlow(from, rawText, userRow);
+        return;
+      }
+
       // ── Admin commands ────────────────────────────────────────────────────
       if (isAdmin(from)) {
         const handled = await handleAdmin(from, rawText);
@@ -301,7 +315,7 @@ app.post("/webhook", (req, res) => {
       // Commands starting with /admin, /broadcast, /breaking, /promise, or
       // /subscribers are admin-only. Non-admins get the main menu silently;
       // we do not reveal that these commands exist.
-      if (!isAdmin(from) && /^\/(admin|broadcast|breaking|promise|subscribers)\b/i.test(rawText.trim())) {
+      if (!isAdmin(from) && /^\/(admin|broadcast|breaking|promise|subscribers|stats|unsuspend|trending)\b/i.test(rawText.trim())) {
         await recordProbeAttempt(from);
         await sendMainMenu(from, userRow);
         return;
@@ -347,6 +361,7 @@ async function start() {
     startBreakingNewsMonitor(fetchRSSItems);
     startEveningWrapUpJob(fetchRSSItems);
     startScheduledBroadcastJob(); // A2: dispatch scheduled + resume interrupted broadcasts
+    startHealthMetricsJob();      // C: health metrics snapshot every 5 minutes
   });
 
   const shutdown = (signal) => {

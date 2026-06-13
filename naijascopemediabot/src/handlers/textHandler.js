@@ -19,8 +19,9 @@ import { trackCategoryRead } from "../services/preferenceService.js";
 import {
   tipsInProgress, reportsInProgress,
   awaitingTeamName, awaitingFactCheck, awaitingHandoff,
-  promiseTracker, lastSentNews, checkRateLimit, track,
+  promiseTracker, lastSentNews, checkRateLimit, track, botMetrics,
 } from "../state/sessionState.js";
+import { startSearch, performSearch, sendSearchHistory } from "../services/searchService.js";
 import { getPollResults } from "../jobs/dailyPoll.js";
 import { CATEGORY_KEYWORDS, CATEGORY_META, SITE_URL } from "../config/constants.js";
 import { logger } from "../utils/logger.js";
@@ -141,6 +142,23 @@ export async function handleText(from, text, rawText, userRow) {
 
   // ── Navigation ───────────────────────────────────────────────────────────────
   if (text === "menu" || text === "help") { await sendMainMenu(from, userRow); return; }
+
+  // ── B1: Search entry points — text triggers ───────────────────────────────
+  const SEARCH_TRIGGERS = new Set(["search", "find", "look up", "search news", "find news"]);
+  if (SEARCH_TRIGGERS.has(text)) {
+    await startSearch(from);
+    return;
+  }
+  if (text.startsWith("/search ")) {
+    const kw = rawText.slice(8).trim();
+    if (kw) await performSearch(from, kw, userRow);
+    else    await startSearch(from);
+    return;
+  }
+  if (text === "/mysearches" || text === "my searches" || text === "search history") {
+    await sendSearchHistory(from, userRow);
+    return;
+  }
 
   // ── News ─────────────────────────────────────────────────────────────────────
   if (text === "news" || text === "headlines" || text === "top") {
@@ -352,7 +370,18 @@ export async function handleText(from, text, rawText, userRow) {
     await sendText(from, "Please allow a moment before sending your next message.");
     return;
   }
-  const reply = await getAIResponse(from, rawText, userRow);
+  const t0 = Date.now();
+  let reply;
+  try {
+    reply = await getAIResponse(from, rawText, userRow);
+    botMetrics.grokSuccessToday++;
+  } catch (err) {
+    botMetrics.grokFailuresToday++;
+    reply = "I am unable to process your request at this time. Please try again in a moment.";
+  }
+  const elapsed = Date.now() - t0;
+  botMetrics.responseTimes.push(elapsed);
+  if (botMetrics.responseTimes.length > 100) botMetrics.responseTimes.shift();
   await sendText(from, reply);
   // 3b. Option B navigation buttons after every AI/general response
   await sendPostGeneralButtons(from);

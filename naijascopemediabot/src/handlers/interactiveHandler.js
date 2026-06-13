@@ -14,18 +14,33 @@ import { upsertUser } from "../utils/db.js";
 import { getStoryExplainer } from "../services/aiService.js";
 import { trackCategoryRead } from "../services/preferenceService.js";
 import { awaitingTeamName, awaitingFactCheck, awaitingHandoff, lastSentNews, onboardingPending, track } from "../state/sessionState.js";
+import { handleSearchInteractive, startSearch } from "../services/searchService.js";
 import { pollData } from "../jobs/dailyPoll.js";
 import { SITE_URL } from "../config/constants.js";
 
 export async function handleInteractive(from, replyId, userRow) {
   // A1/A2: Route admin broadcast wizard replies before any existing flows
-  if (replyId && (replyId.startsWith("broadcast_") || replyId.startsWith("admin_"))) {
+  if (replyId && (replyId.startsWith("broadcast_") || replyId.startsWith("admin_") || replyId.startsWith("stats_"))) {
     const { isAdmin, handleAdminInteractive } = await import("./adminHandler.js");
     if (isAdmin(from)) {
       await handleAdminInteractive(from, replyId);
       return;
     }
   }
+
+  // Module B: Route all search-related replies
+  if (replyId && (
+    replyId.startsWith("search_") ||
+    replyId === "menu_search"
+  )) {
+    if (replyId === "menu_search") {
+      await startSearch(from);
+    } else {
+      await handleSearchInteractive(from, replyId, userRow);
+    }
+    return;
+  }
+
   const items = await fetchRSSItems().catch(() => []);
 
   // ── Onboarding interest picker ───────────────────────────────────────────────
@@ -318,7 +333,7 @@ export async function handleInteractive(from, replyId, userRow) {
   }
 
   if (replyId === "nav_search_topic" || replyId === "nav_search_news") {
-    await sendText(from, "Please type the topic or keyword you would like to search for. For example: Tinubu, NDDC, oil spill, Super Eagles.");
+    await startSearch(from);
     return;
   }
 

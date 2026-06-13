@@ -13,8 +13,44 @@ description: Key architectural decisions, file layout, and gotchas for the Naija
 Node.js ESM (`"type":"module"`), Express 5, Groq SDK, PostgreSQL (pg pool), node-cron.
 
 ## Critical exports to preserve
-- `src/state/sessionState.js` exports: `trackMessageId`, `track`, `tipsInProgress`, `reportsInProgress`, `awaitingTeamName`, `awaitingFactCheck`, `awaitingHandoff`, `lastSentNews`, `onboardingPending`, `promiseTracker`, `checkRateLimit`, `pollData`, `seedKeywordAlerts`
+- `src/state/sessionState.js` exports: `trackMessageId`, `track`, `tipsInProgress`, `reportsInProgress`, `awaitingTeamName`, `awaitingFactCheck`, `awaitingHandoff`, `lastSentNews`, `onboardingPending`, `promiseTracker`, `checkRateLimit`, `pollData`, `seedKeywordAlerts`, `searchSessions`, `searchHistoryMenu`, `suspensionDetails`, `botMetrics`, `liftSuspension`
 - `src/config/constants.js` exports: `CATEGORY_KEYWORDS` (object), `CATEGORY_META` (emoji + label per category)
+
+## Module B — Search Flow (completed)
+- `src/services/searchService.js` — full search module. Exports: `startSearch`, `performSearch`, `handleSearchInteractive`, `runSearchFlow`, `sendSearchHistory`, `getTrendingSearches`, `persistSearchHistory`, `isStopWordsOnly`.
+- Session state: `searchSessions` Map (step = `awaiting_keyword` | `results_displayed`), 3-min TTL, `DUPE_CACHE_MS = 2min` to avoid re-running identical keyword.
+- Pages of 4 results. Reply IDs: `search_next`, `search_new`, `search_main`, `search_website`, `search_browse`, `search_tryagain`, `search_start`, `search_history_[idx]`, `menu_search`.
+- DB tables: `search_history`, `search_analytics` (keyword frequency for /trending).
+- Entry points: text triggers ("search", "find", etc.), `/search [kw]`, `/mysearches`, `menu_search` interactive, `nav_search_topic`/`nav_search_news` interactive. All routed through `interactiveHandler.js` prefix guard + `textHandler.js` SEARCH_TRIGGERS block.
+- **Why:** search sessions must be checked in `index.js` (step = `awaiting_keyword`) BEFORE admin commands and text handler, otherwise the freetext keyword is misrouted.
+
+## Module C — Admin Stats Dashboard (completed)
+- `src/admin/statsService.js` — exports: `buildFullStats`, `buildSecurityDetail`, `buildUsersStats`, `buildHealthStats`, `buildExportStats`, `buildDetailedSubscribers`. Sections: SECURITY & FLAGS, USER METRICS, SEARCH INTELLIGENCE, BROADCAST HISTORY, BOT HEALTH, PROMISE TRACKER.
+- `src/admin/securityLog.js` — exports: `logSecurityEvent`, `recordSuspension`, `liftSuspensionByHash`, `getSuspensionDetailsList`. Uses `suspensionDetails` Map from sessionState.
+- `src/jobs/healthMetricsJob.js` — `startHealthMetricsJob()` → cron `*/5 * * * *` snapshots botMetrics + session counts into `health_metrics` DB table.
+- `/stats [section]` — section can be empty (full), `security`, `users`, `health`, `export`. Message split at 4000 chars if needed.
+- `/unsuspend [hash]` — calls `liftSuspensionByHash(hash)` then `liftSuspension(phone)` from sessionState.
+- `/trending` — calls `getTrendingSearches(7, 10)` from searchService.
+- DB tables: `security_events`, `health_metrics` (alongside B's `search_history`, `search_analytics`) — all in `migrations/005_search_and_stats.sql`.
+
+## Enhanced Admin Menu (completed)
+- `sendAdminMenu` replaced with interactive grouped list (`sendList`). Groups: Broadcast & Alerts, Data & Tracking, Intelligence & Security.
+- Reply IDs: `admin_cmd_broadcast`, `admin_cmd_breaking`, `admin_cmd_promise`, `admin_cmd_subscribers`, `admin_cmd_trending`, `admin_cmd_stats`, `admin_cmd_unsuspend`.
+- `handleAdminInteractive` handles all `admin_cmd_*`, `stats_*`, `admin_subscribers_detail` replies.
+- `interactiveHandler.js` guard extended: `stats_` prefix now also routes to admin handler.
+
+## /subscribers enhanced (completed)
+- Quick overview queries DB for 6 live metrics (total, active_7d, active_30d, opted_out, new_today, new_week).
+- Buttons: Detailed Report (`admin_subscribers_detail`), Full Stats, Admin Menu.
+- `handleSubscribersDetailed` calls `buildDetailedSubscribers()` from statsService.
+
+## AI fallback tracking (completed)
+- `textHandler.js` AI fallback wraps `getAIResponse` in try/catch: success → `botMetrics.grokSuccessToday++`, failure → `botMetrics.grokFailuresToday++`. Response time pushed to `botMetrics.responseTimes` (rolling 100).
+
+## Security event logging (completed)
+- `index.js`: harmful content → `recordSuspension(from, "harmful", snippet)`. Prompt injection → `logSecurityEvent(from, "injection", ...)`. Impersonation → `logSecurityEvent(from, "impersonation", ...)`. All fire-and-forget (`.catch(() => {})`).
+- Non-admin command interception regex extended: `/(admin|broadcast|breaking|promise|subscribers|stats|unsuspend|trending)/i`.
+- Duplicate dedup now increments `botMetrics.duplicatesBlockedToday`.
 
 ## Webhook body parsing pattern
 `express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } })` — stores the raw buffer on `req` for HMAC verification WITHOUT throwing inside the verify callback. The route itself calls `verifyWebhookSignature(req)` which returns `false` on failure, `undefined` when skipped (dev mode), or `true` on success. Never throw inside `express.json`'s verify callback — it causes "headers already sent" errors.
@@ -67,6 +103,8 @@ Sends a single formatted text message (not a WhatsApp list widget) so full headl
 - Daily Briefing: 07:00 WAT — personalised, sorted by `primary_interest`, with category emojis
 - Evening Wrap-Up: 20:00 WAT (cron "0 19 * * *" with Africa/Lagos tz)
 - Breaking News Monitor: every 5 min — seeded with current links on boot to avoid re-alerting old stories
+- Health Metrics Snapshot: every 5 min — `startHealthMetricsJob()` in `index.js` start()
+- Scheduled Broadcast: `startScheduledBroadcastJob()` — dispatches queued broadcasts + resumes interrupted ones on boot
 
 **Why:** node-cron `timezone: "Africa/Lagos"` treats the expression as local WAT time. "0 19 * * *" fires at 19:00 WAT = 18:00 UTC.
 
@@ -75,7 +113,6 @@ All user-facing strings across the entire codebase must conform to:
 - Formal, professional British-influenced English — no pidgin, slang, emojis, or casual punctuation
 - PROMPT_EN is the authoritative system prompt. PROMPT_PIDGIN is an alias of PROMPT_EN (pidgin is disallowed per policy).
 - `resolveSystemPrompt(userRow)` in `aiService.js` handles language variants: appends `PROMPT_IGBO_ADDENDUM` for `lang="ig"` and `PROMPT_YORUBA_ADDENDUM` for `lang="yo"`. All other langs → English.
-- Files updated in Section 4c: `textHandler.js`, `interactiveHandler.js`, `mediaHandler.js`, `onboarding.js`, `alertService.js`, `dailyBriefing.js`, `eveningWrapUp.js`, `dailyPoll.js`, `index.js`.
 
 ## Section 5 — Language Enforcement (completed)
 - `src/utils/language.js` — `sanitiseLanguage(text)` post-processes all outgoing text: replaces common pidgin/slang phrases with formal equivalents via a regex map.
@@ -83,14 +120,9 @@ All user-facing strings across the entire codebase must conform to:
 
 ## Section 6 — Website Referral Architecture (completed)
 - `src/utils/referral.js` — `tickReferral(userId)` → true every 3rd call per user; `getWebsiteReferral(context)` → context-aware sentence; `appendReferralIfDue(userId, text, context)` → appends referral if 3rd tick.
-- Applied in `aiService.js` (general chat) and `newsService.js` `sendNewsItems` (news deliveries).
-- Static import in `newsService.js` (not dynamic) — avoids per-call module resolution overhead.
 
 ## Section 7 — Edge Case & Resilience (completed)
-- **Opt-out**: `src/state/sessionState.js` adds `isOptedOut`, `markOptedOut`, `clearOptedOut`, `seedOptedOutUsers`. `src/utils/db.js` adds `setOptedOut(number, bool)`. Migration `003_opt_out.sql` adds `opted_out BOOLEAN DEFAULT FALSE, opted_out_at TIMESTAMPTZ`. `startup.js` seeds opted-out users from DB on boot. `index.js` handles "stop"/"unsubscribe"/"opt out"/"opt-out"/"remove me" → mark + DB update + subscription removal; "start"/"hi"/"hello"/"hey" from opted-out user → clear + re-onboard.
-- **Group filtering**: `index.js` checks `from.includes("@g.us")` — only responds if message starts with a trigger keyword (news, menu, help, headlines, football, markets, subscribe).
-- **Session timeout**: Changed from 24h to 12h in `index.js` returning-user branch.
+- **Opt-out**: migration `003_opt_out.sql`. `index.js` handles "stop"/"unsubscribe"/"opt out" → mark + DB update; "start"/"hi" from opted-out user → clear + re-onboard.
+- **Group filtering**: `from.includes("@g.us")` check — only responds to trigger keywords.
 - **Message splitting**: `whatsappService.js` `sendText` splits at 3500 chars with `(1/2 — continued below)` / `(2/2)` markers.
-- **Typing indicator**: `sendTypingIndicator(to)` best-effort call in `aiService.js` before Groq completion.
 - **Unknown button fallback**: `interactiveHandler.js` falls through to `sendMainMenu(from, userRow)` for any unrecognised `replyId`.
-- **Opt-out check order**: Placed AFTER DB getUser/upsertUser but BEFORE new-user onboarding. Uses in-memory cache as fast path (works even when DB is temporarily down).
