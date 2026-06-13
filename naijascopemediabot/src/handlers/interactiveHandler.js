@@ -37,7 +37,7 @@ export async function handleInteractive(from, replyId, userRow) {
   }
 
   if (replyId === "ask_ai" || replyId === "menu_ask_ai") {
-    await sendText(from, "Ask me anything about Nigeria, Niger Delta, politics, oil or current affairs — I'm all ears 🤖");
+    await sendText(from, "Please type your question about Nigeria, the Niger Delta, politics, oil and gas, or any other topic within NaijaScope Media's coverage area. The Intelligence Bot will respond promptly.");
     return;
   }
 
@@ -66,7 +66,7 @@ export async function handleInteractive(from, replyId, userRow) {
 
   if (replyId === "menu_factcheck") {
     awaitingFactCheck.add(from);
-    await sendText(from, "🔍 Send me the claim you want fact-checked — I'll get on it:");
+    await sendText(from, "Please send the claim, statement, or image you would like NaijaScope Media to fact-check.");
     return;
   }
 
@@ -81,17 +81,17 @@ export async function handleInteractive(from, replyId, userRow) {
   if (replyId === "menu_journalist") {
     track(from, "journalist");
     awaitingHandoff.set(from, true);
-    await sendText(from, "🎙️ Sure! Briefly describe what you'd like to discuss with our journalist team:");
+    await sendText(from, "Please briefly describe the matter you would like to discuss with the NaijaScope Media journalist team. A correspondent will be assigned to your enquiry.");
     return;
   }
 
   if (replyId === "menu_saved") {
     const saved = await getSavedArticles(from);
     if (saved.length === 0) {
-      await sendText(from, "📚 Your reading list is empty.\n\nAfter reading a story, tap 'Save This' to bookmark it for later!");
+      await sendText(from, "Your reading list is currently empty. After reading a story, tap 'Save This' to add it to your bookmarks.");
     } else {
-      const lines = saved.map((a, i) => `${i + 1}. ${a.article_title}\n🔗 ${a.article_url}`).join("\n\n");
-      await sendText(from, `🔖 Your saved articles:\n\n${lines}`);
+      const lines = saved.map((a, i) => `${i + 1}. ${a.article_title}\n${a.article_url}`).join("\n\n");
+      await sendText(from, `NaijaScope Media — Your Saved Articles:\n\n${lines}`);
     }
     return;
   }
@@ -100,20 +100,20 @@ export async function handleInteractive(from, replyId, userRow) {
   if (replyId === "sub_daily") {
     await addSubscription(from, "daily_digest");
     await upsertUser(from, { digest_enabled: true });
-    await sendText(from, "☀️ Done! Your morning briefing drops at 7AM WAT every day.\n\nReply 'unsubscribe' anytime to stop. 📰");
+    await sendText(from, "You have been subscribed to the NaijaScope Media Morning Briefing. Your personalised daily intelligence digest will be delivered at 07:00 WAT each morning. Type 'unsubscribe' at any time to cancel.");
     return;
   }
 
   if (replyId === "sub_breaking") {
     await addSubscription(from, "breaking_news");
     await upsertUser(from, { breaking_alerts: true });
-    await sendText(from, "🔴 You're in! You'll be the first to know when breaking news drops.\n\nReply 'unsubscribe' anytime. 📡");
+    await sendText(from, "You have been subscribed to NaijaScope Media Breaking News alerts. You will be notified as soon as significant stories are confirmed. Type 'unsubscribe' at any time to cancel.");
     return;
   }
 
   if (replyId === "sub_opportunities") {
     await addSubscription(from, "opportunities");
-    await sendText(from, "🎓 Subscribed to Opportunities! I'll ping you whenever scholarships, grants or jobs come through. 🎯");
+    await sendText(from, "You have been subscribed to NaijaScope Media Opportunities alerts. You will be notified of relevant scholarships, grants, fellowships, and employment opportunities as they are published.");
     return;
   }
 
@@ -122,7 +122,7 @@ export async function handleInteractive(from, replyId, userRow) {
     const lang     = replyId.replace("lang_", "");
     await saveLanguagePreference(from, lang);
     const langName = LANG_NAMES[lang] || lang;
-    await sendText(from, `✅ Language set to ${langName}! All news will arrive in ${langName} from now on. E don happen! 🇳🇬`);
+    await sendText(from, `Your language preference has been updated to ${langName}. NaijaScope Media will deliver your news in ${langName} from this point forward.`);
     return;
   }
 
@@ -149,7 +149,7 @@ export async function handleInteractive(from, replyId, userRow) {
   }
   if (replyId === "football_npfl") {
     const npfl = await fetchNPFLNews(items);
-    await sendNewsItems(from, npfl, "🏟️ NPFL News:", userRow);
+    await sendNewsItems(from, npfl, "NaijaScope — NPFL News:", userRow);
     return;
   }
   if (replyId === "football_transfers") {
@@ -163,7 +163,7 @@ export async function handleInteractive(from, replyId, userRow) {
   }
   if (replyId === "football_alerts") {
     awaitingTeamName.add(from);
-    await sendText(from, "⚽ Which club do you want alerts for?\n\nJust type the team name — e.g. Enyimba, Arsenal, Manchester City");
+    await sendText(from, "Please type the name of the club you would like to follow. For example: Enyimba, Arsenal, Manchester City.");
     return;
   }
 
@@ -171,11 +171,11 @@ export async function handleInteractive(from, replyId, userRow) {
   if (replyId === "action_explainer") {
     const recent = lastSentNews.get(from);
     if (recent?.[0]) {
-      await sendText(from, "💡 Generating context...");
+      await sendText(from, "Generating editorial context. Please wait.");
       const explainer = await getStoryExplainer(recent[0].title);
       await sendText(from, explainer);
     } else {
-      await sendText(from, "Read a story first, then I'll give you the full context! 👇");
+      await sendText(from, "Please read a story first. Type 'news' for the latest headlines, then use this option to receive editorial context.");
     }
     return;
   }
@@ -184,9 +184,9 @@ export async function handleInteractive(from, replyId, userRow) {
     const recent = lastSentNews.get(from);
     if (recent?.[0]) {
       await saveArticle(from, recent[0]);
-      await sendText(from, "🔖 Saved to your reading list! Type 'saved' anytime to see your bookmarks.");
+      await sendText(from, "The article has been saved to your reading list. Type 'saved' at any time to access your bookmarks.");
     } else {
-      await sendText(from, "Read a story first, then save it! 👇");
+      await sendText(from, "Please read a story first before saving it. Type 'news' to view the latest headlines.");
     }
     return;
   }
@@ -201,7 +201,7 @@ export async function handleInteractive(from, replyId, userRow) {
     if (recent?.[0]) {
       const words = (recent[0].title || "").split(" ").slice(0, 2).join(" ");
       const more  = items.filter(i => i.link !== recent[0].link && (i.title || "").toLowerCase().includes(words.toLowerCase())).slice(0, 4);
-      await sendNewsItems(from, more.length > 0 ? more : items.slice(5, 10), "🔍 More stories:", userRow);
+      await sendNewsItems(from, more.length > 0 ? more : items.slice(5, 10), "NaijaScope — More Stories:", userRow);
     } else {
       await sendNewsItems(from, items.slice(0, 5), null, userRow);
     }
@@ -213,7 +213,7 @@ export async function handleInteractive(from, replyId, userRow) {
     const optIdx = parseInt(replyId.split("_")[1]);
     if (pollData.question && optIdx >= 0 && optIdx < pollData.options.length) {
       pollData.votes.set(from, optIdx);
-      await sendText(from, `✅ Vote recorded: "${pollData.options[optIdx]}"\n\nType 'poll' to see how others are voting!`);
+      await sendText(from, `Your vote for "${pollData.options[optIdx]}" has been recorded. Type 'poll' to view the current results.`);
     }
     return;
   }
@@ -228,7 +228,7 @@ export async function handleInteractive(from, replyId, userRow) {
   }
 
   if (replyId === "welcome_search") {
-    await sendText(from, "🔍 What topic would you like to search for?\n\nJust type your search term — e.g. *Tinubu*, *NDDC*, *oil spill*, *Super Eagles*");
+    await sendText(from, "Please type the topic you would like to search for. For example: Tinubu, NDDC, oil spill, Super Eagles.");
     return;
   }
 
@@ -239,7 +239,7 @@ export async function handleInteractive(from, replyId, userRow) {
       ...(await getNewsByCategory("nddc").catch(() => [])),
       ...(await getNewsByCategory("environment").catch(() => [])),
     ].slice(0, 5);
-    await sendNewsItems(from, ndDeltaItems.length > 0 ? ndDeltaItems : items.slice(0, 5), "🌿 Niger Delta Focus:", userRow);
+    await sendNewsItems(from, ndDeltaItems.length > 0 ? ndDeltaItems : items.slice(0, 5), "NaijaScope — Niger Delta Focus:", userRow);
     await sendPostNewsButtons(from);
     return;
   }
@@ -249,7 +249,7 @@ export async function handleInteractive(from, replyId, userRow) {
     const bayelsaItems = items.filter(i =>
       /(bayelsa|yenagoa|ijaw|ogbia|sagbama|nembe|brass)/i.test(i.title + " " + (i.contentSnippet || ""))
     ).slice(0, 5);
-    await sendNewsItems(from, bayelsaItems.length > 0 ? bayelsaItems : items.slice(0, 5), "📍 Bayelsa State News:", userRow);
+    await sendNewsItems(from, bayelsaItems.length > 0 ? bayelsaItems : items.slice(0, 5), "NaijaScope — Bayelsa State News:", userRow);
     await sendPostNewsButtons(from);
     return;
   }
@@ -264,7 +264,7 @@ export async function handleInteractive(from, replyId, userRow) {
   }
 
   if (replyId === "welcome_watch") {
-    await sendText(from, `📺 *Watch & Listen — NaijaScope Media*\n\nFor video reports, live coverage and media content, visit:\n\n🔗 https://www.bayelsamedia.com.ng\n\nAll our multimedia content is available on the website.`);
+    await sendText(from, "NaijaScope Media — Watch and Listen\n\nFor video reports, live coverage, and multimedia content, visit NaijaScope Media's full website:\n\nhttps://www.bayelsamedia.com.ng\n\nAll multimedia content is available on the website.");
     await sendPostGeneralButtons(from);
     return;
   }
@@ -273,14 +273,14 @@ export async function handleInteractive(from, replyId, userRow) {
     track(from, "opinion");
     trackCategoryRead(from, "politics").catch(() => {});
     const opinionItems = await getNewsByCategory("politics").catch(() => items.slice(0, 5));
-    await sendNewsItems(from, opinionItems.slice(0, 5), "💬 Opinion & Analysis:", userRow);
+    await sendNewsItems(from, opinionItems.slice(0, 5), "NaijaScope — Opinion and Analysis:", userRow);
     await sendPostNewsButtons(from);
     return;
   }
 
   if (replyId === "welcome_about") {
     await sendText(from,
-      `ℹ️ *About NaijaScope Media*\n\nNaijaScope Media is a digital news intelligence platform dedicated to delivering credible, real-time news from Bayelsa State, the Niger Delta region, and across Nigeria.\n\nWe cover politics, oil & gas, crime, environment, sports, entertainment and more — powered by AI and driven by journalism.\n\n🌐 www.bayelsamedia.com.ng\n📧 admin@bayelsamedia.com.ng\n\nOur mission: *Inform. Engage. Empower.*`
+      "About NaijaScope Media\n\nNaijaScope Media is a digital news intelligence platform dedicated to delivering credible, real-time news from Bayelsa State, the Niger Delta region, and across Nigeria.\n\nOur coverage spans politics, oil and gas, crime, the environment, sports, and entertainment — powered by AI and driven by professional journalism.\n\nWebsite: www.bayelsamedia.com.ng\nEmail: admin@bayelsamedia.com.ng\n\nMission: Inform. Engage. Empower."
     );
     await sendPostGeneralButtons(from);
     return;
@@ -288,14 +288,14 @@ export async function handleInteractive(from, replyId, userRow) {
 
   if (replyId === "welcome_contact") {
     await sendText(from,
-      `📞 *Contact NaijaScope Media*\n\n🌐 Website: www.bayelsamedia.com.ng\n📧 Email: admin@bayelsamedia.com.ng\n\nFor news tips, press inquiries, advertising, or editorial matters — reach our team via email or visit the website.\n\nTo submit an anonymous tip right here, type *tip*.`
+      "Contact NaijaScope Media\n\nWebsite: www.bayelsamedia.com.ng\nEmail: admin@bayelsamedia.com.ng\n\nFor news tips, press enquiries, advertising, or editorial matters, reach our team via email or visit the website.\n\nTo submit an anonymous tip through this service, type 'tip'."
     );
     await sendPostGeneralButtons(from);
     return;
   }
 
   if (replyId === "welcome_website") {
-    await sendText(from, `🌐 *Visit NaijaScope Media*\n\nFor full coverage, in-depth reports, and multimedia content:\n\n👉 https://www.bayelsamedia.com.ng`);
+    await sendText(from, "NaijaScope Media — Full Coverage\n\nFor in-depth reports, investigative journalism, and multimedia content, visit:\n\nhttps://www.bayelsamedia.com.ng");
     await sendPostGeneralButtons(from);
     return;
   }
@@ -304,18 +304,18 @@ export async function handleInteractive(from, replyId, userRow) {
   if (replyId === "nav_more_headlines") {
     track(from, "news");
     trackCategoryRead(from, "politics").catch(() => {});
-    await sendNewsItems(from, items.slice(0, 5), "📰 Latest Headlines:", userRow);
+    await sendNewsItems(from, items.slice(0, 5), "NaijaScope — Latest Headlines:", userRow);
     await sendPostNewsButtons(from);
     return;
   }
 
   if (replyId === "nav_search_topic" || replyId === "nav_search_news") {
-    await sendText(from, "🔍 What topic would you like to search for?\n\nJust type your keyword — e.g. *Tinubu*, *NDDC*, *oil spill*, *Super Eagles*");
+    await sendText(from, "Please type the topic or keyword you would like to search for. For example: Tinubu, NDDC, oil spill, Super Eagles.");
     return;
   }
 
   if (replyId === "nav_visit_website") {
-    await sendText(from, `🌐 *NaijaScope Media — Full Coverage*\n\n👉 https://www.bayelsamedia.com.ng`);
+    await sendText(from, "NaijaScope Media — Full Coverage\n\nhttps://www.bayelsamedia.com.ng");
     return;
   }
 

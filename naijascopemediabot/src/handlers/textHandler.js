@@ -33,20 +33,20 @@ export async function runTipFlow(from, text, rawText) {
   const flow = tipsInProgress.get(from);
   if (flow.step === 1) {
     flow.data.about = rawText; flow.step = 2;
-    await sendText(from, "📍 Step 2 of 3: Which location does this involve? (City / LGA / Community)");
+    await sendText(from, "Step 2 of 3: Which location does this involve? Please provide the city, Local Government Area, or community name.");
     return;
   }
   if (flow.step === 2) {
     flow.data.location = rawText; flow.step = 3;
-    await sendText(from, "📎 Step 3 of 3: Any evidence? Send a photo or type 'none'");
+    await sendText(from, "Step 3 of 3: Do you have any supporting evidence? Send a photograph or type 'none' to proceed without one.");
     return;
   }
   if (flow.step === 3) {
     flow.data.evidence = text === "none" ? "No evidence provided" : rawText;
     tipsInProgress.delete(from);
-    await sendText(from, "✅ Your tip has been submitted anonymously to NaijaScope Media.\n\nThank you for speaking up. Your identity is fully protected 🔒");
+    await sendText(from, "Your tip has been submitted anonymously to NaijaScope Media. Your identity is fully protected. Thank you for contributing to responsible journalism.");
     if (ADMIN_NUMBER) {
-      await sendText(ADMIN_NUMBER, `🔔 New Anonymous Tip:\n\nAbout: ${flow.data.about}\nLocation: ${flow.data.location}\nEvidence: ${flow.data.evidence}`);
+      await sendText(ADMIN_NUMBER, `NaijaScope — New Anonymous Tip\n\nSubject: ${flow.data.about}\nLocation: ${flow.data.location}\nEvidence: ${flow.data.evidence}`);
     }
   }
 }
@@ -55,25 +55,25 @@ export async function runReportFlow(from, rawText) {
   const flow = reportsInProgress.get(from);
   if (flow.step === 1) {
     flow.data.what = rawText; flow.step = 2;
-    await sendText(from, "📍 Step 2 of 4: Where exactly did this happen? (Location)");
+    await sendText(from, "Step 2 of 4: Where did this occur? Please provide the specific location — city, community, or Local Government Area.");
     return;
   }
   if (flow.step === 2) {
     flow.data.where = rawText; flow.step = 3;
-    await sendText(from, "🕐 Step 3 of 4: When did this happen? (Date and time)");
+    await sendText(from, "Step 3 of 4: When did this happen? Please provide the date and time, as accurately as possible.");
     return;
   }
   if (flow.step === 3) {
     flow.data.when = rawText; flow.step = 4;
-    await sendText(from, "📷 Step 4 of 4: Send a photo if you have one, or type 'none'");
+    await sendText(from, "Step 4 of 4: Do you have a photograph? Send one now, or type 'none' to complete your submission without one.");
     return;
   }
   if (flow.step === 4) {
-    flow.data.photo = rawText.toLowerCase() === "none" ? "No photo" : "Photo submitted";
+    flow.data.photo = rawText.toLowerCase() === "none" ? "No photograph" : "Photograph submitted";
     reportsInProgress.delete(from);
-    await sendText(from, "✅ Story submitted to the NaijaScope newsroom!\n\nOur journalists will review your report. Thank you for being a citizen journalist 📰🇳🇬");
+    await sendText(from, "Your report has been submitted to the NaijaScope Media newsroom. Our journalists will review it and follow up as appropriate. Thank you for your contribution.");
     if (ADMIN_NUMBER) {
-      await sendText(ADMIN_NUMBER, `📰 New Citizen Report:\n\nWhat: ${flow.data.what}\nWhere: ${flow.data.where}\nWhen: ${flow.data.when}\nPhoto: ${flow.data.photo}`);
+      await sendText(ADMIN_NUMBER, `NaijaScope — New Citizen Report\n\nWhat: ${flow.data.what}\nWhere: ${flow.data.where}\nWhen: ${flow.data.when}\nPhotograph: ${flow.data.photo}`);
     }
   }
 }
@@ -84,10 +84,10 @@ function getPromises(politicianRaw) {
   for (const [key, promises] of promiseTracker) {
     if (key.includes(name) || name.includes(key)) {
       const lines = promises.map((p, i) => `${i + 1}. [${p.status}] ${p.promise}`).join("\n");
-      return `📋 Promise Tracker — ${key}:\n\n${lines}\n\nSource: NaijaScope Media`;
+      return `NaijaScope Media — Promise Tracker: ${key}\n\n${lines}\n\nSource: NaijaScope Media`;
     }
   }
-  return `No promise records found for "${politicianRaw}" yet.\n\nType 'help' to explore all NaijaScope features.`;
+  return `No promise records are currently available for "${politicianRaw}" in the NaijaScope Media database. Type 'menu' to explore all available services.`;
 }
 
 // ── Discover / trending experience ────────────────────────────────────────────
@@ -114,7 +114,7 @@ async function sendDiscoverCard(from, items, userRow) {
     return `${emoji} ${label} — ${count} ${count === 1 ? "story" : "stories"}`;
   });
 
-  await sendText(from, `🔎 What's making noise in Nigeria right now:\n\n${lines.join("\n")}\n\nWhat would you like to dive into?`);
+  await sendText(from, `NaijaScope Media — Current Coverage Analysis:\n\n${lines.join("\n")}\n\nSelect a category below to read the latest stories.`);
 
   const top3 = sorted.slice(0, 3);
   const buttons = top3.map(([cat]) => {
@@ -152,7 +152,7 @@ export async function handleText(from, text, rawText, userRow) {
 
   if (text === "trending" || text === "hot") {
     const items = await fetchRSSItems();
-    await sendNewsItems(from, items.slice(0, 3), "🔥 Trending on NaijaScope:", userRow);
+    await sendNewsItems(from, items.slice(0, 3), "NaijaScope — Most Active Stories:", userRow);
     await sendPostNewsButtons(from);
     return;
   }
@@ -177,10 +177,10 @@ export async function handleText(from, text, rawText, userRow) {
   if (text === "why" || text === "why this matters" || text === "context") {
     const recent = lastSentNews.get(from);
     if (recent?.[0]) {
-      await sendText(from, "💡 Generating context...");
+      await sendText(from, "Generating editorial context. Please wait.");
       await sendText(from, await getStoryExplainer(recent[0].title));
     } else {
-      await sendText(from, "Read a story first, then type 'why' for the context behind it! 👇");
+      await sendText(from, "Please read a story first. Type 'news' to see the latest headlines, then use 'why' to receive editorial context on the most recent story.");
     }
     return;
   }
@@ -189,9 +189,9 @@ export async function handleText(from, text, rawText, userRow) {
     const recent = lastSentNews.get(from);
     if (recent?.[0]) {
       await saveArticle(from, recent[0]);
-      await sendText(from, "🔖 Saved! Type 'saved' anytime to revisit your reading list.");
+      await sendText(from, "The article has been saved to your reading list. Type 'saved' at any time to access your bookmarks.");
     } else {
-      await sendText(from, "Read a story first and then save it! 👇");
+      await sendText(from, "Please read a story first before saving it. Type 'news' to view the latest headlines.");
     }
     return;
   }
@@ -199,10 +199,10 @@ export async function handleText(from, text, rawText, userRow) {
   if (text === "saved" || text === "my saved" || text === "bookmarks") {
     const saved = await getSavedArticles(from);
     if (saved.length === 0) {
-      await sendText(from, "📚 Your reading list is empty.\n\nAfter reading a story, type 'save' or tap 'Save This'!");
+      await sendText(from, "Your reading list is currently empty. After reading a story, type 'save' or tap 'Save This' to add it to your bookmarks.");
     } else {
-      const lines = saved.map((a, i) => `${i + 1}. ${a.article_title}\n🔗 ${a.article_url}`).join("\n\n");
-      await sendText(from, `🔖 Your saved articles:\n\n${lines}`);
+      const lines = saved.map((a, i) => `${i + 1}. ${a.article_title}\n${a.article_url}`).join("\n\n");
+      await sendText(from, `NaijaScope Media — Your Saved Articles:\n\n${lines}`);
     }
     return;
   }
@@ -221,14 +221,14 @@ export async function handleText(from, text, rawText, userRow) {
       removeSubscription(from, "daily_digest"),
       removeSubscription(from, "breaking_news"),
     ]);
-    await sendText(from, "👋 Unsubscribed from all alerts. No wahala!\n\nType 'subscribe' anytime to rejoin 📡");
+    await sendText(from, "You have been unsubscribed from all NaijaScope Media alerts. Type 'subscribe' at any time to re-enrol.");
     return;
   }
 
   // ── Language ──────────────────────────────────────────────────────────────────
   if (text === "language" || text === "my language") { await sendLanguageMenu(from); return; }
-  if (text === "pidgin on")  { await saveLanguagePreference(from, "pidgin"); await sendText(from, "Oya! Pidgin mode don activate 🇳🇬"); return; }
-  if (text === "pidgin off") { await saveLanguagePreference(from, "en");     await sendText(from, "Pidgin mode off. Back to English ✅"); return; }
+  if (text === "pidgin on")  { await saveLanguagePreference(from, "pidgin"); await sendText(from, "Your language preference has been noted. NaijaScope Media responds in formal English by default, with Igbo and Yoruba available on request."); return; }
+  if (text === "pidgin off") { await saveLanguagePreference(from, "en");     await sendText(from, "Your language preference has been reset to English."); return; }
 
   // ── Markets ───────────────────────────────────────────────────────────────────
   if (text === "oil" || text === "oil price" || text === "oil today") {
@@ -255,7 +255,7 @@ export async function handleText(from, text, rawText, userRow) {
   }
   if (text.startsWith("weather ")) {
     const city = rawText.slice(8).trim();
-    if (!city) { await sendText(from, "Which city? e.g: weather Yenagoa"); return; }
+    if (!city) { await sendText(from, "Please specify a city. For example: weather Yenagoa"); return; }
     await sendText(from, await fetchWeather(city));
     return;
   }
@@ -263,7 +263,7 @@ export async function handleText(from, text, rawText, userRow) {
   // ── Opportunities ─────────────────────────────────────────────────────────────
   if (["opportunities", "jobs", "scholarships", "grants"].includes(text)) {
     trackCategoryRead(from, "opportunities").catch(() => {});
-    await sendNewsItems(from, await getNewsByCategory("opportunities"), "🎓 Latest opportunities:", userRow);
+    await sendNewsItems(from, await getNewsByCategory("opportunities"), "NaijaScope — Opportunities:", userRow);
     return;
   }
 
@@ -272,35 +272,35 @@ export async function handleText(from, text, rawText, userRow) {
 
   if (text.startsWith("fact check ") || text.startsWith("fact-check ")) {
     const claim = rawText.slice(rawText.indexOf(" ", 4) + 1).trim();
-    await sendText(from, "🔍 Checking that claim...");
+    await sendText(from, "NaijaScope Fact-Check: Verifying that claim. Please wait.");
     await sendText(from, await verifyClaim(claim));
     return;
   }
   if (text === "fact check" || text === "verify") {
     awaitingFactCheck.add(from);
-    await sendText(from, "🔍 Send me the claim you want fact-checked:");
+    await sendText(from, "Please send the claim you would like NaijaScope Media to fact-check.");
     return;
   }
 
   if (isHandoffRequest(text)) {
     awaitingHandoff.set(from, true);
-    await sendText(from, "🎙️ Sure! Briefly describe what you'd like to discuss with our journalist team:");
+    await sendText(from, "Please briefly describe the matter you would like to discuss with our journalist team. A correspondent will be assigned to your enquiry.");
     return;
   }
 
   // ── NaijaScope beats ──────────────────────────────────────────────────────────
   if (text === "election" || text === "2027" || text === "2027 election") {
     trackCategoryRead(from, "election").catch(() => {});
-    await sendNewsItems(from, await getNewsByCategory("election"), "🗳️ 2027 Election coverage:", userRow);
+    await sendNewsItems(from, await getNewsByCategory("election"), "NaijaScope — 2027 Election Coverage:", userRow);
     return;
   }
   if (text === "nddc") {
     trackCategoryRead(from, "nddc").catch(() => {});
-    await sendNewsItems(from, await getNewsByCategory("nddc"), "📋 NDDC Tracker:", userRow);
+    await sendNewsItems(from, await getNewsByCategory("nddc"), "NaijaScope — NDDC Tracker:", userRow);
     return;
   }
   if (text === "contact") {
-    await sendText(from, `📞 NaijaScope Media:\n\n🌐 ${SITE_URL}\n📧 admin@bayelsamedia.com.ng\n\nWe'd love to hear from you 🇳🇬`);
+    await sendText(from, `NaijaScope Media — Contact Information\n\nWebsite: ${SITE_URL}\nEmail: admin@bayelsamedia.com.ng\n\nFor editorial enquiries, advertising, press releases, or general correspondence, please use the channels above.`);
     return;
   }
 
@@ -313,20 +313,20 @@ export async function handleText(from, text, rawText, userRow) {
     const kw = rawText.slice(6).trim().toLowerCase();
     if (kw) {
       await persistKeywordAlert(from, kw);
-      await sendText(from, `🔔 Alert set for "${kw}"!\n\nI'll notify you the moment it hits the news. 📡`);
+      await sendText(from, `Your keyword alert for "${kw}" has been activated. NaijaScope Media will notify you when this topic appears in the news.`);
     }
     return;
   }
 
   if (text === "tip" || text === "send tip") {
     tipsInProgress.set(from, { step: 1, data: {} });
-    await sendText(from, "🕵️ Anonymous Tip Submission (3 steps)\n\nYour identity will never be revealed.\n\nStep 1 of 3: What is your tip about?");
+    await sendText(from, "NaijaScope Media — Anonymous Tip Submission (3 steps)\n\nYour identity will be fully protected throughout this process.\n\nStep 1 of 3: What is your tip about? Please provide a clear, factual description.");
     return;
   }
 
   if (text === "report" || text === "citizen report") {
     reportsInProgress.set(from, { step: 1, data: {} });
-    await sendText(from, "📰 Citizen Report (4 steps)\n\nYour report goes directly to our newsroom.\n\nStep 1 of 4: What happened?");
+    await sendText(from, "NaijaScope Media — Citizen Report (4 steps)\n\nYour report will be submitted directly to our newsroom for editorial review.\n\nStep 1 of 4: What happened? Please describe the incident clearly and factually.");
     return;
   }
 
@@ -343,13 +343,13 @@ export async function handleText(from, text, rawText, userRow) {
   if (langIntent) {
     await saveLanguagePreference(from, langIntent);
     const langName = LANG_NAMES[langIntent] || langIntent;
-    await sendText(from, `✅ Language set to ${langName}! News coming your way in ${langName} 🇳🇬`);
+    await sendText(from, `Your language preference has been updated to ${langName}. NaijaScope Media will deliver your news in ${langName}.`);
     return;
   }
 
   // ── AI fallback ───────────────────────────────────────────────────────────────
   if (!checkRateLimit(from)) {
-    await sendText(from, "Easy now — give me 3 seconds to breathe 😄");
+    await sendText(from, "Please allow a moment before sending your next message.");
     return;
   }
   const reply = await getAIResponse(from, rawText, userRow);

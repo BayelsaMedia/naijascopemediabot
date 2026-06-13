@@ -13,19 +13,19 @@ export async function handleMedia(from, message, userRow) {
   if (message.type === "location") {
     const { latitude, longitude } = message.location || {};
     if (!latitude || !longitude) {
-      await sendText(from, "📍 Received your location, but couldn't read the coordinates. Try again or type a city name instead.");
+      await sendText(from, "Your location was received but the coordinates could not be read. Please try again or type a city name instead.");
       return;
     }
-    await sendText(from, "📍 Got your location! Finding news near you...");
+    await sendText(from, "Location received. Retrieving local news for your area.");
     try {
       const geo   = await reverseGeocode(latitude, longitude);
       await saveUserLocation(from, geo.state, geo.lga);
       const items = await fetchRSSItems();
       const local = await fetchLocalNews(items, geo.state);
-      await sendNewsItems(from, local, `📰 News for ${geo.display}:`, userRow);
+      await sendNewsItems(from, local, `NaijaScope News — ${geo.display}:`, userRow);
     } catch (err) {
       logger.error("[MEDIA] Location processing error:", err.message);
-      await sendText(from, "Couldn't load local news right now. Type 'news' for the latest headlines.");
+      await sendText(from, "Local news could not be retrieved at this moment. Type 'news' for the latest national headlines.");
     }
     return;
   }
@@ -34,10 +34,10 @@ export async function handleMedia(from, message, userRow) {
   if (message.type === "image") {
     const mediaId = message.image?.id;
     if (!mediaId) {
-      await sendText(from, "📷 Got your image! Describe what you need and I'll help. 👇");
+      await sendText(from, "Your image has been received. Please describe what you would like help with and NaijaScope Media will assist you.");
       return;
     }
-    await sendText(from, "📸 Analysing your image...");
+    await sendText(from, "NaijaScope Fact-Check: Analysing your image. Please wait.");
     try {
       const { buffer, mimeType } = await downloadMedia(mediaId);
       const base64 = buffer.toString("base64");
@@ -48,15 +48,15 @@ export async function handleMedia(from, message, userRow) {
           role: "user",
           content: [
             { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-            { type: "text", text: "You are a Nigerian news fact-checker. Analyse this image. Start with REAL, FAKE, or UNVERIFIED — then a colon. Then 2 tight sentences on what you observe and why. End with: NaijaScope Fact-Check. Plain text only." },
+            { type: "text", text: "You are a senior Nigerian news fact-checker at NaijaScope Media. Analyse this image. Begin your response with REAL, FAKE, or UNVERIFIED followed by a colon. Then provide two precise sentences stating what you observe and the basis for your assessment. Conclude with: NaijaScope Fact-Check. Plain text only. No emojis." },
           ],
         }],
         max_tokens: 250,
       });
-      await sendText(from, "📸 NaijaScope Fact-Check:\n\n" + completion.choices[0].message.content);
+      await sendText(from, "NaijaScope Fact-Check:\n\n" + completion.choices[0].message.content);
     } catch (err) {
       logger.error("[MEDIA] analyzeImage error:", err.message);
-      await sendText(from, "📸 Couldn't analyse that image right now. Describe the claim in text and I'll fact-check it for you.");
+      await sendText(from, "The image could not be analysed at this moment. Please describe the claim in text and NaijaScope Media will fact-check it for you.");
     }
     return;
   }
@@ -65,18 +65,21 @@ export async function handleMedia(from, message, userRow) {
   if (message.type === "audio") {
     const mediaId = message.audio?.id;
     if (!mediaId) {
-      await sendText(from, "🎤 Voice note received. Please type your question and I'll answer it. 👇");
+      await sendText(from, "Your voice note was received. Please type your question and NaijaScope Media will respond.");
       return;
     }
-    await sendText(from, "🎤 Transcribing your voice note...");
+    await sendText(from, "Transcribing your voice note. Please wait.");
     try {
       const transcription = await transcribeAudio(mediaId);
-      await sendText(from, `🎤 Heard: "${transcription}"\n\nProcessing...`);
-      if (!checkRateLimit(from)) { await sendText(from, "Easy now — give me 3 seconds. 😄"); return; }
+      await sendText(from, `Transcribed: "${transcription}"\n\nProcessing your request.`);
+      if (!checkRateLimit(from)) {
+        await sendText(from, "Please allow a moment before sending your next message.");
+        return;
+      }
       const { intent } = processVoiceIntent(transcription);
       if (intent === "news") {
         const items = await fetchRSSItems();
-        await sendNewsItems(from, items.slice(0, 5), "📰 Top stories:", userRow);
+        await sendNewsItems(from, items.slice(0, 5), "NaijaScope — Latest Headlines:", userRow);
       } else if (intent === "football") {
         await sendFootballMenu(from);
       } else if (intent === "oil") {
@@ -87,36 +90,35 @@ export async function handleMedia(from, message, userRow) {
       }
     } catch (err) {
       logger.error("[MEDIA] transcribeAudio error:", err.message);
-      await sendText(from, "🎤 Couldn't catch that voice note. Please type your message instead. 👇");
+      await sendText(from, "Your voice note could not be transcribed. Please type your message and NaijaScope Media will assist you.");
     }
     return;
   }
 
   // ── Video ──────────────────────────────────────────────────────────────────
   if (message.type === "video") {
-    await sendText(from, "🎬 Got your video. I can't process video files directly — but if there's a claim you want fact-checked, describe it in text and I'll get on it.");
+    await sendText(from, "Video files cannot be processed directly by this service. If you have a claim you would like fact-checked, please describe it in text and NaijaScope Media will review it.");
     return;
   }
 
   // ── Document ───────────────────────────────────────────────────────────────
   if (message.type === "document") {
-    await sendText(from, "📄 Got your document. I can't read files directly — paste the key text here and I'll help you with it.");
+    await sendText(from, "Document files cannot be read directly by this service. Please paste the relevant text here and NaijaScope Media will assist you.");
     return;
   }
 
   // ── Sticker ────────────────────────────────────────────────────────────────
   if (message.type === "sticker") {
-    await sendText(from, "😄 Nice sticker! Type 'news' for headlines or 'menu' to see everything I can do.");
+    await sendText(from, "Thank you for your message. Type 'news' for the latest headlines or 'menu' to explore all NaijaScope Media services.");
     return;
   }
 
   // ── Reaction ───────────────────────────────────────────────────────────────
   if (message.type === "reaction") {
-    // Reactions don't need a reply — silently acknowledge
     return;
   }
 
   // ── Unsupported / unknown ──────────────────────────────────────────────────
   logger.info(`[MEDIA] Unhandled message type: ${message.type} from ${from}`);
-  await sendText(from, "I received your message but couldn't process that format. Try typing your question or tap 'menu' to get started. 👇");
+  await sendText(from, "This message format is not supported. Please type your question or tap 'menu' to access NaijaScope Media services.");
 }

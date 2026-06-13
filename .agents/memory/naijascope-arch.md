@@ -69,3 +69,10 @@ Sends a single formatted text message (not a WhatsApp list widget) so full headl
 - Breaking News Monitor: every 5 min — seeded with current links on boot to avoid re-alerting old stories
 
 **Why:** node-cron `timezone: "Africa/Lagos"` treats the expression as local WAT time. "0 19 * * *" fires at 19:00 WAT = 18:00 UTC.
+
+## Section 4 — Tone and Language Policy (completed)
+All user-facing strings across the entire codebase must conform to:
+- Formal, professional British-influenced English — no pidgin, slang, emojis, or casual punctuation
+- PROMPT_EN is the authoritative system prompt. PROMPT_PIDGIN is an alias of PROMPT_EN (pidgin is disallowed per policy).
+- `resolveSystemPrompt(userRow)` in `aiService.js` handles language variants: appends `PROMPT_IGBO_ADDENDUM` for `lang="ig"` and `PROMPT_YORUBA_ADDENDUM` for `lang="yo"`. All other langs → English.
+- Files updated in Section 4c: `textHandler.js`, `interactiveHandler.js`, `mediaHandler.js`, `onboarding.js`, `alertService.js`, `dailyBriefing.js`, `eveningWrapUp.js`, `dailyPoll.js`, `index.js`.

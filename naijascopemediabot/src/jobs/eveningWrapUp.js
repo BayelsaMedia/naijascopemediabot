@@ -7,7 +7,12 @@ import { logger } from "../utils/logger.js";
 const sentToday = new Set();
 
 export async function sendEveningWrapUp(fetchRSSItems) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString("en-GB", {
+    timeZone: "Africa/Lagos",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
   try {
     const res = await query(
       `SELECT u.whatsapp_number
@@ -24,9 +29,9 @@ export async function sendEveningWrapUp(fetchRSSItems) {
     const wrap      = await generateEveningWrap(headlines);
     if (!wrap) return;
 
-    const header = `🌆 NaijaScope Evening Wrap — ${today}\n\n`;
-    const links  = top5.map((item, i) => `${i + 1}. ${item.title}\n🔗 ${item.link}`).join("\n\n");
-    const footer = "\n\nwww.bayelsamedia.com.ng 🇳🇬";
+    const header = `NaijaScope Media — Evening Intelligence Wrap\n${today}\n\n`;
+    const links  = top5.map((item, i) => `${i + 1}. ${item.title}\n${item.link}`).join("\n\n");
+    const footer = "\n\nwww.bayelsamedia.com.ng";
 
     logger.info(`[EVENING WRAP] Sending to ${subscribers.length} subscribers`);
 
@@ -35,7 +40,7 @@ export async function sendEveningWrapUp(fetchRSSItems) {
       if (sentToday.has(key)) continue;
       try {
         await sendText(whatsapp_number, header + wrap);
-        await sendText(whatsapp_number, `📰 Today's stories:\n\n${links}${footer}`);
+        await sendText(whatsapp_number, `Today's Top Stories:\n\n${links}${footer}`);
         sentToday.add(key);
         await new Promise(r => setTimeout(r, 1_200));
       } catch (err) {
@@ -50,7 +55,6 @@ export async function sendEveningWrapUp(fetchRSSItems) {
 }
 
 export function startEveningWrapUpJob(fetchRSSItems) {
-  // 8:00 PM Nigeria time (WAT = UTC+1)
   cron.schedule("0 19 * * *", async () => {
     logger.info("[CRON] Running evening wrap-up job");
     await sendEveningWrapUp(fetchRSSItems);

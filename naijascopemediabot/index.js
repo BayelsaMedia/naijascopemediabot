@@ -124,10 +124,10 @@ app.post("/webhook", (req, res) => {
         const txt = message.text?.body?.trim().toLowerCase() || "";
         if (txt === "menu" || txt === "resume" || txt === "bot") {
           await closeTicket(openTicket.reference_code);
-          await sendText(from, "✅ Bot reactivated. Welcome back. 🤖");
+          await sendText(from, "Your session has been returned to the NaijaScope Media Intelligence Bot. Welcome back.");
           await sendMainMenu(from);
         } else {
-          await sendText(from, `🎙️ You're connected to our journalist team (Ref: ${openTicket.reference_code}).\n\nReply "menu" to return to the bot.`);
+          await sendText(from, `You are currently connected to the NaijaScope Media journalist team (Reference: ${openTicket.reference_code}).\n\nReply "menu" to return to the automated service.`);
         }
         return;
       }
@@ -156,7 +156,7 @@ app.post("/webhook", (req, res) => {
 
       // ── DB completely down — give a friendly retry notice ─────────────────
       if (!dbAvailable) {
-        await sendText(from, "We're experiencing a short technical issue. Please send your message again in a moment — we'll be right back. 🙏");
+        await sendText(from, "NaijaScope Media is experiencing a brief technical interruption. Please resend your message in a moment and service will resume shortly.");
         return;
       }
 
@@ -217,13 +217,13 @@ app.post("/webhook", (req, res) => {
       if (awaitingTeamName.has(from)) {
         awaitingTeamName.delete(from);
         await subscribeToTeam(from, rawText);
-        await sendText(from, `⚡ Subscribed to ${rawText} alerts! You'll get match updates as they happen. ⚽`);
+        await sendText(from, `You have been subscribed to ${rawText} alerts. NaijaScope Media will notify you of relevant match updates as they occur.`);
         return;
       }
 
       if (awaitingFactCheck.has(from)) {
         awaitingFactCheck.delete(from);
-        await sendText(from, "🔍 Checking that claim...");
+        await sendText(from, "NaijaScope Fact-Check: Verifying that claim. Please wait.");
         await sendText(from, await verifyClaim(rawText));
         return;
       }
@@ -242,7 +242,7 @@ app.post("/webhook", (req, res) => {
 
       // ── Users who received the onboarding picker but typed instead of tapping
       if (onboardingPending.has(from)) {
-        await sendText(from, "👆 Tap one of the options above to pick your interest — or type 'menu' to jump straight in!");
+        await sendText(from, "Please select one of the options above to set your news interest, or type 'menu' to proceed directly to the main service.");
         return;
       }
 

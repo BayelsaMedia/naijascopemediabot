@@ -3,7 +3,7 @@ import { sendText } from "./whatsappService.js";
 import { addUserAlert } from "../state/sessionState.js";
 import { categorizeStory } from "./newsService.js";
 import { logger } from "../utils/logger.js";
-import { SITE_URL } from "../config/constants.js";
+import { SITE_URL, SITE_FULL_URL } from "../config/constants.js";
 
 export async function getSubscribers(type) {
   const res = await query(
@@ -50,8 +50,8 @@ export async function getAllKeywordAlerts() {
 // ── Breaking news alert ────────────────────────────────────────────────────────
 export async function sendBreakingAlert(item, subscribers) {
   const { emoji } = categorizeStory(item);
-  const now  = new Date().toLocaleTimeString("en-NG", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit" });
-  const msg  = `🔴 BREAKING — ${now} WAT\n\n${emoji} ${item.title}\n\nThis story is developing. Tap the link for full coverage.\n🔗 ${item.link}\n\n— NaijaScope Newsroom · ${SITE_URL}`;
+  const now = new Date().toLocaleTimeString("en-NG", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit" });
+  const msg = `BREAKING NEWS — ${now} WAT\n\n${emoji} ${item.title}\n\nThis story is developing. Read the full report at the link below.\n${item.link}\n\n— NaijaScope Newsroom | ${SITE_URL}`;
 
   let sent = 0;
   for (const number of subscribers) {
@@ -63,5 +63,5 @@ export async function sendBreakingAlert(item, subscribers) {
       logger.error(`sendBreakingAlert failed for ${number}:`, err.message);
     }
   }
-  logger.info(`[BREAKING] Alert sent: "${item.title.slice(0, 60)}" → ${sent}/${subscribers.length}`);
+  logger.info(`[BREAKING] Alert sent: "${item.title.slice(0, 60)}" -> ${sent}/${subscribers.length}`);
 }

@@ -1,6 +1,6 @@
 import Groq from "groq-sdk";
 import { logger } from "../utils/logger.js";
-import { PROMPT_EN, PROMPT_PIDGIN } from "../prompts/systemPrompts.js";
+import { PROMPT_EN, PROMPT_IGBO_ADDENDUM, PROMPT_YORUBA_ADDENDUM } from "../prompts/systemPrompts.js";
 import { MAX_CONVERSATION_USERS } from "../config/constants.js";
 
 let _groq = null;
@@ -13,12 +13,24 @@ export function getGroq() {
 
 const conversationHistory = new Map();
 
+// ── Resolve system prompt by language preference ──────────────────────────────
+function resolveSystemPrompt(userRow) {
+  const lang     = userRow?.language_pref || "en";
+  let   sys      = PROMPT_EN;
+
+  if (lang === "ig")  sys += PROMPT_IGBO_ADDENDUM;
+  if (lang === "yo")  sys += PROMPT_YORUBA_ADDENDUM;
+
+  if (userRow?.location_state)   sys += ` The user is located in ${userRow.location_state}.`;
+  if (userRow?.primary_interest) sys += ` Their primary news interest is ${userRow.primary_interest}.`;
+
+  return sys;
+}
+
 // ── Conversational AI ─────────────────────────────────────────────────────────
 export async function getAIResponse(userId, userMessage, userRow) {
   try {
-    const groq    = getGroq();
-    const lang    = userRow?.language_pref || "en";
-    const isPidgin = lang === "pidgin";
+    const groq = getGroq();
 
     if (!conversationHistory.has(userId)) {
       conversationHistory.set(userId, []);
@@ -26,10 +38,8 @@ export async function getAIResponse(userId, userMessage, userRow) {
         conversationHistory.delete(conversationHistory.keys().next().value);
     }
 
-    const history = conversationHistory.get(userId);
-    let sys = isPidgin ? PROMPT_PIDGIN : PROMPT_EN;
-    if (userRow?.location_state) sys += ` User is from ${userRow.location_state}.`;
-    if (userRow?.primary_interest) sys += ` Their primary news interest is ${userRow.primary_interest}.`;
+    const history  = conversationHistory.get(userId);
+    const sys      = resolveSystemPrompt(userRow);
 
     const messages = [
       { role: "system",    content: sys },
@@ -51,7 +61,7 @@ export async function getAIResponse(userId, userMessage, userRow) {
     return response;
   } catch (err) {
     logger.error("getAIResponse error:", err.message);
-    return "Abeg — my brain dey process something heavy. Try again in a sec 🤔";
+    return "NaijaScope Media is unable to process your request at this moment. Please try again shortly or visit www.bayelsamedia.com.ng for the latest news.";
   }
 }
 
@@ -64,16 +74,16 @@ export async function getStoryExplainer(title) {
       messages: [
         {
           role: "system",
-          content: "You are a senior Nigerian journalist writing for NaijaScope Media. Given a news headline, explain in exactly 3 concise sentences WHY this story matters — especially to people in the Niger Delta, Bayelsa, and South-South Nigeria. Be specific, insightful, and human. No bullet points, no markdown, plain text only.",
+          content: "You are a senior journalist at NaijaScope Media writing for a professional Nigerian readership. Given a news headline, explain in exactly three concise sentences why this story matters — with particular relevance to the Niger Delta, Bayelsa State, and South-South Nigeria. Be specific, insightful, and publication-ready. No bullet points, no markdown, plain text only. No emojis.",
         },
         { role: "user", content: `Headline: ${title}` },
       ],
       max_tokens: 200,
     });
-    return `💡 Why this matters:\n\n${completion.choices[0].message.content}\n\n— NaijaScope Editorial`;
+    return `Why This Matters:\n\n${completion.choices[0].message.content}\n\n— NaijaScope Editorial`;
   } catch (err) {
     logger.error("getStoryExplainer error:", err.message);
-    return "Couldn't generate context right now. Type the headline and ask me — I'll explain it! 🤔";
+    return "Context analysis is unavailable at this moment. Please visit www.bayelsamedia.com.ng for the full story.";
   }
 }
 
@@ -87,7 +97,7 @@ export async function generateEveningWrap(headlines) {
       messages: [
         {
           role: "system",
-          content: "You are the lead editor at NaijaScope Media. Write a warm, intelligent, 4–5 sentence Evening Wrap-Up summarising the day's top Nigerian news stories. Feel like a trusted anchor signing off for the night — not a robot. No bullet points. No markdown. Plain text only. End with a sign-off line.",
+          content: "You are the lead editor at NaijaScope Media. Write a formal, authoritative four-to-five sentence Evening Wrap summarising the day's top Nigerian news stories. The tone must reflect a professional news broadcast — composed, credible, and publication-ready. No bullet points. No markdown. No emojis. Plain text only. Conclude with a sign-off line.",
         },
         { role: "user", content: `Today's top stories:\n\n${list}` },
       ],
