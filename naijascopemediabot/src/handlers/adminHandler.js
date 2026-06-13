@@ -7,7 +7,7 @@
 
 import { sendText, sendButtons, sendList } from "../services/whatsappService.js";
 import { getSubscribers } from "../services/alertService.js";
-import { breakingLive, promiseTracker, analytics, adminWizardState, liftSuspension } from "../state/sessionState.js";
+import { breakingLive, promiseTracker, analytics, adminWizardState, promiseWizardState, liftSuspension } from "../state/sessionState.js";
 import { closeTicket } from "../services/supportService.js";
 import { query } from "../utils/db.js";
 import { logger } from "../utils/logger.js";
@@ -231,6 +231,12 @@ export async function handleAdminInteractive(from, replyId) {
   }
   if (replyId === "stats_admin_menu") {
     await sendAdminMenu(from);
+    return;
+  }
+
+  // ── Promise status buttons ─────────────────────────────────────────────────
+  if (replyId.startsWith("promise_status_")) {
+    await handlePromiseInteractive(from, replyId);
     return;
   }
 }
@@ -464,6 +470,76 @@ export async function handleAdmin(from, rawText) {
     return true;
   }
 
+  // ── Promise wizard text steps ─────────────────────────────────────────────
+  const pWizard = promiseWizardState.get(from);
+  if (pWizard) {
+    // Abandon wizard if admin sends a command
+    if (trimmed.startsWith("/") || upper.startsWith("ADD PROMISE") || upper.startsWith("UPDATE PROMISE")) {
+      promiseWizardState.delete(from);
+      // Fall through to command handling
+    } else {
+      if (pWizard.step === 1) {
+        // Step 1 response → politician name captured, ask for promise text
+        promiseWizardState.set(from, { ...pWizard, step: 2, politician: trimmed });
+        await sendText(from,
+          `Promise Tracker — New Entry (Step 2 of 4)\n\n` +
+          `Politician: ${trimmed}\n\n` +
+          `Please enter the full text of the promise:`
+        );
+        return true;
+      }
+      if (pWizard.step === 2) {
+        // Step 2 response → promise text captured, ask for date
+        promiseWizardState.set(from, { ...pWizard, step: 3, text: trimmed });
+        await sendText(from,
+          `Promise Tracker — New Entry (Step 3 of 4)\n\n` +
+          `When was this promise made?\n\n` +
+          `Enter the date in DD/MM/YYYY format, or type "today".`
+        );
+        return true;
+      }
+      if (pWizard.step === 3) {
+        // Step 3 response → date captured, send status buttons
+        let dateStr;
+        if (trimmed.toLowerCase() === "today") {
+          dateStr = new Date().toISOString().slice(0, 10);
+        } else {
+          const m = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+          if (!m) {
+            await sendText(from, "Invalid format. Please use DD/MM/YYYY or type \"today\".");
+            return true;
+          }
+          dateStr = `${m[3]}-${m[2]}-${m[1]}`;
+        }
+        const displayDate = trimmed.toLowerCase() === "today"
+          ? new Date().toLocaleDateString("en-GB") : trimmed;
+        promiseWizardState.set(from, { ...pWizard, step: 4, date: dateStr });
+        await sendText(from,
+          `Promise Tracker — New Entry (Step 4 of 4)\n\n` +
+          `Politician: ${pWizard.politician}\n` +
+          `Promise: ${pWizard.text}\n` +
+          `Date: ${displayDate}\n\n` +
+          `What is the current status of this promise?`
+        );
+        await sendButtons(from, "Select status:", [
+          { id: "promise_status_PENDING", title: "Pending" },
+          { id: "promise_status_KEPT",    title: "Kept"    },
+          { id: "promise_status_BROKEN",  title: "Broken"  },
+        ]);
+        return true;
+      }
+      if (pWizard.step === 4) {
+        // Text received while waiting for button — re-prompt
+        await sendButtons(from, "Please select a status using the buttons:", [
+          { id: "promise_status_PENDING", title: "Pending" },
+          { id: "promise_status_KEPT",    title: "Kept"    },
+          { id: "promise_status_BROKEN",  title: "Broken"  },
+        ]);
+        return true;
+      }
+    }
+  }
+
   // ── /admin — show help menu ────────────────────────────────────────────────
   if (upper === "/ADMIN") {
     await sendAdminMenu(from);
@@ -585,7 +661,24 @@ export async function handleAdmin(from, rawText) {
     return true;
   }
 
-  // ── Promise tracker ───────────────────────────────────────────────────────
+  // ── /promise add — start 5-step DB-backed wizard ────────────────────────
+  if (trimmed.toLowerCase() === "/promise add") {
+    promiseWizardState.set(from, { step: 1, politician: "", text: "", date: "" });
+    await sendText(from,
+      `Promise Tracker — New Entry (Step 1 of 4)\n\n` +
+      `Please enter the politician's full name or title:`
+    );
+    await logAdminAction(from, "/promise add", "wizard_started");
+    return true;
+  }
+
+  // ── /promise stats — percentages across all tracked promises ────────────
+  if (trimmed.toLowerCase() === "/promise stats") {
+    await handlePromiseStats(from);
+    return true;
+  }
+
+  // ── Promise tracker (legacy pipe-delimited syntax) ────────────────────────
   if (upper.startsWith("ADD PROMISE ")) {
     const parts = rawText.slice(12).split("|");
     if (parts.length < 2) {
@@ -694,4 +787,111 @@ async function handleUnsuspendCommand(from, hash) {
   liftSuspension(phone);
   await sendText(from, `Suspension lifted for User #${hash}. They may now send messages again.`);
   await logAdminAction(from, `/unsuspend ${hash}`, "suspension_lifted");
+}
+
+// ── Promise Tracker: /promise stats ──────────────────────────────────────────
+async function handlePromiseStats(from) {
+  try {
+    const totRes = await query(
+      `SELECT
+         COUNT(*)                                      AS total,
+         COUNT(*) FILTER (WHERE status = 'KEPT')      AS kept,
+         COUNT(*) FILTER (WHERE status = 'BROKEN')    AS broken,
+         COUNT(*) FILTER (WHERE status = 'PENDING')   AS pending
+       FROM promise_tracker`
+    );
+    const r      = totRes.rows[0] || {};
+    const total  = Number(r.total   || 0);
+    const kept   = Number(r.kept    || 0);
+    const broken = Number(r.broken  || 0);
+    const pend   = Number(r.pending || 0);
+
+    const pct = (n) => total > 0 ? `${Math.round((n / total) * 100)}%` : "—";
+    const D   = "────────────────────────────────";
+
+    let topSection = "";
+    if (total > 0) {
+      const topRes = await query(
+        `SELECT politician,
+                COUNT(*)                                    AS cnt,
+                COUNT(*) FILTER (WHERE status = 'KEPT')    AS kept,
+                COUNT(*) FILTER (WHERE status = 'BROKEN')  AS broken,
+                COUNT(*) FILTER (WHERE status = 'PENDING') AS pending
+         FROM promise_tracker
+         GROUP BY politician
+         ORDER BY cnt DESC LIMIT 5`
+      );
+      const lines = topRes.rows.map((pr, i) =>
+        `${i + 1}. ${pr.politician}\n   Total: ${pr.cnt}  Kept: ${pr.kept}  Broken: ${pr.broken}  Pending: ${pr.pending}`
+      ).join("\n");
+      topSection = `\n\nTOP POLITICIANS\n${D}\n${lines}`;
+    }
+
+    const msg =
+      `PROMISE TRACKER STATISTICS\n${D}\n` +
+      `Total Promises Logged: ${total}\n` +
+      `\nKept:    ${kept} (${pct(kept)})\n` +
+      `Broken:  ${broken} (${pct(broken)})\n` +
+      `Pending: ${pend} (${pct(pend)})\n` +
+      `\nKeep Rate: ${pct(kept)}` +
+      topSection +
+      `\n${D}\n` +
+      `Use /promise add to log a new promise.`;
+
+    await sendText(from, msg);
+    await logAdminAction(from, "/promise stats", "ok");
+  } catch (err) {
+    logger.error("[ADMIN] /promise stats failed:", err.message);
+    await sendText(from, "Promise statistics are temporarily unavailable.");
+  }
+}
+
+// ── Promise Tracker: interactive status button handler ────────────────────────
+async function handlePromiseInteractive(from, replyId) {
+  const wizard = promiseWizardState.get(from);
+  if (!wizard || wizard.step !== 4) {
+    await sendText(from,
+      `No active promise entry found.\n\nSend /promise add to start a new entry.`
+    );
+    return;
+  }
+
+  const status = replyId.replace("promise_status_", ""); // PENDING | KEPT | BROKEN
+  const { politician, text, date } = wizard;
+  promiseWizardState.delete(from);
+
+  // Persist to DB
+  let dbId = null;
+  try {
+    const res = await query(
+      `INSERT INTO promise_tracker (politician, promise_text, date_made, status)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [politician, text, date || null, status]
+    );
+    dbId = res.rows[0]?.id;
+  } catch (err) {
+    logger.error("[PROMISE] DB insert failed:", err.message);
+  }
+
+  // Sync in-memory map
+  const key = politician.toLowerCase();
+  if (!promiseTracker.has(key)) promiseTracker.set(key, []);
+  promiseTracker.get(key).push({ promise: text, status, date: date || "N/A", id: dbId });
+
+  const displayDate = date
+    ? date.split("-").reverse().join("/")
+    : "N/A";
+
+  await sendText(from,
+    `Promise Tracker — Entry Saved\n` +
+    `────────────────────────────────\n` +
+    `Politician: ${politician}\n` +
+    `Promise:    ${text}\n` +
+    `Date Made:  ${displayDate}\n` +
+    `Status:     ${status}\n` +
+    `DB Record:  #${dbId ?? "N/A"}\n` +
+    `────────────────────────────────\n` +
+    `Send /promise stats to view all tracked promises.`
+  );
+  await logAdminAction(from, `/promise add → saved (id=${dbId})`, "saved");
 }

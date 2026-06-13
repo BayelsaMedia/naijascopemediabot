@@ -13,8 +13,38 @@ description: Key architectural decisions, file layout, and gotchas for the Naija
 Node.js ESM (`"type":"module"`), Express 5, Groq SDK, PostgreSQL (pg pool), node-cron.
 
 ## Critical exports to preserve
-- `src/state/sessionState.js` exports: `trackMessageId`, `track`, `tipsInProgress`, `reportsInProgress`, `awaitingTeamName`, `awaitingFactCheck`, `awaitingHandoff`, `lastSentNews`, `onboardingPending`, `promiseTracker`, `checkRateLimit`, `pollData`, `seedKeywordAlerts`, `searchSessions`, `searchHistoryMenu`, `suspensionDetails`, `botMetrics`, `liftSuspension`
+- `src/state/sessionState.js` exports: `trackMessageId`, `track`, `tipsInProgress`, `reportsInProgress`, `awaitingTeamName`, `awaitingFactCheck`, `awaitingHandoff`, `lastSentNews`, `onboardingPending`, `promiseTracker`, `promiseWizardState`, `seedPromiseTracker`, `checkRateLimit`, `pollData`, `seedKeywordAlerts`, `searchSessions`, `searchHistoryMenu`, `suspensionDetails`, `botMetrics`, `liftSuspension`
 - `src/config/constants.js` exports: `CATEGORY_KEYWORDS` (object), `CATEGORY_META` (emoji + label per category)
+
+## Admin routing order (index.js)
+1. Opted-out check (all message types)
+2. Multi-step user flows (tips, reports, awaitingTeamName, awaitingFactCheck, awaitingHandoff)
+3. Search session check (`awaiting_keyword`) — runs BEFORE admin check; if admin has an open search session, commands may be eaten
+4. `if (isAdmin(from)) handleAdmin(from, rawText)` — only reached if no user flow matched
+5. Non-admin `/command` intercept regex → silent main-menu redirect + probe alert
+
+## broadcast_log status values — CRITICAL
+Valid DB CHECK constraint: `pending | sending | sent | failed | cancelled`.  
+**'scheduled' is NOT a valid status** — attempting to insert it raises a constraint violation.  
+Scheduled broadcasts are stored as `status='pending'` with a non-null `scheduled_at`; the cron job queries `WHERE status='pending' AND scheduled_at IS NOT NULL AND scheduled_at <= NOW()`.  
+**Why:** the original code had `scheduledAt ? "pending" : "pending"` (dead ternary). Correct fix is just `"pending"`. Do NOT introduce a 'scheduled' status without adding a new migration to alter the constraint AND updating the cron query.
+
+## promise_tracker (migration 006)
+Table: `id, politician, promise_text, date_made, status (PENDING/KEPT/BROKEN), created_at, updated_at`.  
+Admin wizard: `/promise add` → 4-step interactive flow (name → text → date → status button).  
+Admin stats: `/promise stats` → counts + percentages by status + top politicians.  
+Seeded from DB on startup via `seedPromiseTracker()` in sessionState.js.  
+Button reply IDs: `promise_status_PENDING | promise_status_KEPT | promise_status_BROKEN`.  
+Legacy single-command: `ADD PROMISE politician | promise | status` (in-memory only, not DB-backed).
+
+## interactiveHandler.js — admin prefix routing
+Must include ALL admin reply prefixes:  
+`broadcast_ | admin_ | stats_ | promise_`  
+**Add new prefixes here whenever a new admin wizard uses interactive buttons.**
+
+## Migration pattern
+Migrations in `migrations/` numbered `001_` → `006_`. Applied in order on every boot by `src/utils/startup.js` (idempotent DDL only). To add a migration: create the file and add its filename to the `MIGRATIONS` array in `startup.js`. All tables use `CREATE TABLE IF NOT EXISTS`.  
+Current sequence: 001_initial_schema → 002_add_user_preferences → 003_opt_out → 004_admin_features → 005_search_and_stats → 006_promise_tracker.
 
 ## Module B — Search Flow (completed)
 - `src/services/searchService.js` — full search module. Exports: `startSearch`, `performSearch`, `handleSearchInteractive`, `runSearchFlow`, `sendSearchHistory`, `getTrendingSearches`, `persistSearchHistory`, `isStopWordsOnly`.
@@ -74,9 +104,6 @@ try {
 }
 // If dbAvailable is false, send a friendly retry notice and return.
 ```
-
-## Migration pattern
-Migrations in `migrations/` numbered `001_`, `002_`, etc. Applied in order on every boot by `src/utils/startup.js` (idempotent DDL only). To add a migration: create the file and add its filename to the `MIGRATIONS` array in `startup.js`. All tables use `CREATE TABLE IF NOT EXISTS`.
 
 ## Media handler coverage
 `src/handlers/mediaHandler.js` must handle ALL WhatsApp message types: location, image, audio, video, document, sticker, reaction, + a catch-all for unknown types. Missing types = silent no-response to users.

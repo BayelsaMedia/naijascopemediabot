@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname     = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql", "003_opt_out.sql", "004_admin_features.sql", "005_search_and_stats.sql"];
+const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql", "003_opt_out.sql", "004_admin_features.sql", "005_search_and_stats.sql", "006_promise_tracker.sql"];
 const MIGRATION_DIR = path.join(__dirname, "../../migrations");
 
 const REQUIRED_VARS = [
@@ -91,6 +91,16 @@ export async function validateStartup() {
     logger.info(`[STARTUP] ✅ Loaded ${numbers.length} opted-out user(s) into memory`);
   } catch (err) {
     logger.warn("[STARTUP] ⚠️  Opted-out user seed failed:", err.message);
+  }
+
+  // Seed promise tracker from DB into memory
+  try {
+    const { seedPromiseTracker } = await import("../state/sessionState.js");
+    const promiseRows = await query("SELECT * FROM promise_tracker ORDER BY politician, created_at");
+    seedPromiseTracker(promiseRows.rows);
+    logger.info(`[STARTUP] ✅ Loaded ${promiseRows.rows.length} promise(s) into memory`);
+  } catch (err) {
+    logger.warn("[STARTUP] ⚠️  Promise tracker seed failed:", err.message);
   }
 
   // A3: Restore breaking news mode state from DB (survives restarts)

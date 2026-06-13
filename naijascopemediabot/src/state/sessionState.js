@@ -140,6 +140,24 @@ export const analytics = {
   peakHours:      new Array(24).fill(0),
 };
 
+// ── Promise wizard state (admin multi-step /promise add) ──────────────────────
+// Map<adminPhone, { step: number, politician: string, text: string, date: string }>
+export const promiseWizardState = new Map();
+
+// Seed promiseTracker from DB rows on startup
+export function seedPromiseTracker(rows) {
+  for (const row of rows) {
+    const key = (row.politician || "").toLowerCase();
+    if (!promiseTracker.has(key)) promiseTracker.set(key, []);
+    promiseTracker.get(key).push({
+      promise: row.promise_text,
+      status:  row.status,
+      date:    row.date_made ? new Date(row.date_made).toISOString().slice(0, 10) : "N/A",
+      id:      row.id,
+    });
+  }
+}
+
 // ── Module B: Search session state ────────────────────────────────────────────
 // Map<phone, { step, keyword, results, pageIndex, lastActivity, lastSearchedAt }>
 export const searchSessions   = new Map();
