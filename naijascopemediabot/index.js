@@ -168,30 +168,32 @@ app.post("/webhook", (req, res) => {
 
       // ── Section 7.9: Opt-out / re-engagement handling ────────────────────
       // In-memory cache is the fast path; DB persists across restarts.
-      if (message.type === "text") {
-        const bodyRaw   = (message.text?.body || "").trim();
-        const bodyLow   = bodyRaw.toLowerCase();
+      // The opted-out check covers ALL message types (text, interactive, media).
+      const currentlyOptedOut = isOptedOut(from) || existingUser?.opted_out;
 
-        const OPT_OUT_TRIGGERS  = ["stop", "unsubscribe", "opt out", "opt-out", "remove me"];
-        const RE_ENGAGE_TRIGGERS = ["start", "hi", "hello", "hey"];
-
-        // Check in-memory cache first (fast path)
-        const currentlyOptedOut = isOptedOut(from) || existingUser?.opted_out;
-
-        if (currentlyOptedOut) {
+      if (currentlyOptedOut) {
+        // Only a text re-engage keyword can lift the opt-out
+        if (message.type === "text") {
+          const bodyRaw = (message.text?.body || "").trim();
+          const bodyLow = bodyRaw.toLowerCase();
+          const RE_ENGAGE_TRIGGERS = ["start", "hi", "hello", "hey"];
           if (RE_ENGAGE_TRIGGERS.some(t => bodyLow === t || bodyLow.startsWith(t + " "))) {
-            // User wishes to re-engage
             clearOptedOut(from);
             try { await setOptedOut(from, false); } catch (_) {}
             await sendText(from, "Welcome back to NaijaScope Media. Your subscription has been reactivated. You will receive news briefings and alerts as normal.");
             await sendOnboardingWelcome(from);
-          } else {
-            // User is opted out and this is not a re-engage message — drop silently
-            logger.info(`[OPT-OUT] Dropped message from opted-out user: ${from}`);
+            return;
           }
-          return;
         }
+        // Any other message from an opted-out user — drop silently
+        logger.info(`[OPT-OUT] Dropped message from opted-out user: ${from}`);
+        return;
+      }
 
+      if (message.type === "text") {
+        const bodyRaw  = (message.text?.body || "").trim();
+        const bodyLow  = bodyRaw.toLowerCase();
+        const OPT_OUT_TRIGGERS = ["stop", "unsubscribe", "opt out", "opt-out", "remove me"];
         if (OPT_OUT_TRIGGERS.some(t => bodyLow === t || bodyLow.startsWith(t + " "))) {
           markOptedOut(from);
           try {

@@ -2,21 +2,18 @@ import axios from "axios";
 import { query } from "../utils/db.js";
 import { logger } from "../utils/logger.js";
 
-const FOOTBALL_DATA_TOKEN = process.env.FOOTBALL_DATA_TOKEN;
-const API_FOOTBALL_KEY = process.env.API_FOOTBALL_KEY;
-
 const FD_BASE = "https://api.football-data.org/v4";
 const AF_BASE = "https://v3.football.api-sports.io";
 
 function fdHeaders() {
-  return { "X-Auth-Token": FOOTBALL_DATA_TOKEN };
+  return { "X-Auth-Token": process.env.FOOTBALL_DATA_TOKEN };
 }
 function afHeaders() {
-  return { "x-apisports-key": API_FOOTBALL_KEY };
+  return { "x-apisports-key": process.env.API_FOOTBALL_KEY };
 }
 
 export async function fetchEPLStandings() {
-  if (!FOOTBALL_DATA_TOKEN) return "⚽ Football Data API key not configured yet.\n\nContact admin to enable Premier League standings.";
+  if (!process.env.FOOTBALL_DATA_TOKEN) return "⚽ Football Data API key not configured yet.\n\nContact admin to enable Premier League standings.";
   try {
     const res = await axios.get(`${FD_BASE}/competitions/PL/standings`, { headers: fdHeaders(), timeout: 8000 });
     const table = res.data.standings[0].table.slice(0, 10);
@@ -29,7 +26,7 @@ export async function fetchEPLStandings() {
 }
 
 export async function fetchUCLFixtures() {
-  if (!FOOTBALL_DATA_TOKEN) return "⚽ Football Data API key not configured yet.";
+  if (!process.env.FOOTBALL_DATA_TOKEN) return "⚽ Football Data API key not configured yet.";
   try {
     const res = await axios.get(`${FD_BASE}/competitions/CL/matches?status=SCHEDULED`, { headers: fdHeaders(), timeout: 8000 });
     const matches = res.data.matches.slice(0, 5);
@@ -43,7 +40,7 @@ export async function fetchUCLFixtures() {
 }
 
 export async function fetchTodaysFixtures() {
-  if (!API_FOOTBALL_KEY) return "⚽ API-Football key not configured yet.\n\nContact admin to enable live fixtures.";
+  if (!process.env.API_FOOTBALL_KEY) return "⚽ API-Football key not configured yet.\n\nContact admin to enable live fixtures.";
   try {
     const today = new Date().toISOString().slice(0, 10);
     const res = await axios.get(`${AF_BASE}/fixtures?date=${today}`, { headers: afHeaders(), timeout: 8000 });
@@ -60,7 +57,7 @@ export async function fetchTodaysFixtures() {
 }
 
 export async function fetchLiveScores() {
-  if (!API_FOOTBALL_KEY) return "⚽ API-Football key not configured.\n\nContact admin to enable live scores.";
+  if (!process.env.API_FOOTBALL_KEY) return "⚽ API-Football key not configured.\n\nContact admin to enable live scores.";
   try {
     const res = await axios.get(`${AF_BASE}/fixtures?live=all`, { headers: afHeaders(), timeout: 8000 });
     const live = (res.data.response || []).slice(0, 6);

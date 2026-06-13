@@ -49,7 +49,7 @@ export async function createBroadcastLog({ messageBody, broadcastType, segment, 
       segment || "all",
       scheduledAt || null,
       adminPhoneHash || null,
-      scheduledAt ? "pending" : "pending",
+      scheduledAt ? "scheduled" : "pending",
     ]
   );
   return res.rows[0].id;

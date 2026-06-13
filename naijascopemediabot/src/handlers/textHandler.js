@@ -289,7 +289,7 @@ export async function handleText(from, text, rawText, userRow) {
   if (text === "poll") { await sendText(from, getPollResults()); return; }
 
   if (text.startsWith("fact check ") || text.startsWith("fact-check ")) {
-    const claim = rawText.slice(rawText.indexOf(" ", 4) + 1).trim();
+    const claim = rawText.replace(/^fact[- ]check\s+/i, "").trim();
     await sendText(from, "NaijaScope Fact-Check: Verifying that claim. Please wait.");
     await sendText(from, await verifyClaim(claim));
     return;

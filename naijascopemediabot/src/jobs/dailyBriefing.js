@@ -95,5 +95,5 @@ export function startDailyBriefingJob(fetchRSSItems) {
     logger.info("[CRON] Running daily briefing job");
     await sendDailyBriefings(fetchRSSItems);
   }, { timezone: "Africa/Lagos" });
-  logger.info("[CRON] Daily briefing scheduled for 07:00 WAT");
+  logger.info("[CRON] Daily briefing scheduled for 06:00 WAT");
 }

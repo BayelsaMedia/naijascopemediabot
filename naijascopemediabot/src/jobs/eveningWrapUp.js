@@ -59,5 +59,5 @@ export function startEveningWrapUpJob(fetchRSSItems) {
     logger.info("[CRON] Running evening wrap-up job");
     await sendEveningWrapUp(fetchRSSItems);
   }, { timezone: "Africa/Lagos" });
-  logger.info("[CRON] Evening Wrap-Up scheduled for 20:00 WAT");
+  logger.info("[CRON] Evening Wrap-Up scheduled for 19:00 WAT");
 }
