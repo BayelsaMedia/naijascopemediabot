@@ -32,6 +32,8 @@ import { startDailyBriefingJob } from "./src/jobs/dailyBriefing.js";
 import { startDailyPollJob } from "./src/jobs/dailyPoll.js";
 import { startBreakingNewsMonitor } from "./src/jobs/breakingNewsMonitor.js";
 import { startEveningWrapUpJob } from "./src/jobs/eveningWrapUp.js";
+import { startScheduledBroadcastJob } from "./src/jobs/scheduledBroadcastJob.js";
+import { recordProbeAttempt, getAdminNumbers } from "./src/admin/adminAudit.js";
 
 const app = express();
 
@@ -295,6 +297,16 @@ app.post("/webhook", (req, res) => {
         if (handled) return;
       }
 
+      // ── A1: Non-admin command interception ────────────────────────────────
+      // Commands starting with /admin, /broadcast, /breaking, /promise, or
+      // /subscribers are admin-only. Non-admins get the main menu silently;
+      // we do not reveal that these commands exist.
+      if (!isAdmin(from) && /^\/(admin|broadcast|breaking|promise|subscribers)\b/i.test(rawText.trim())) {
+        await recordProbeAttempt(from);
+        await sendMainMenu(from, userRow);
+        return;
+      }
+
       // ── Users who received the onboarding picker but typed instead of tapping
       if (onboardingPending.has(from)) {
         await sendText(from, "Please select one of the options above to set your news interest, or type 'menu' to proceed directly to the main service.");
@@ -334,6 +346,7 @@ async function start() {
     startDailyPollJob();
     startBreakingNewsMonitor(fetchRSSItems);
     startEveningWrapUpJob(fetchRSSItems);
+    startScheduledBroadcastJob(); // A2: dispatch scheduled + resume interrupted broadcasts
   });
 
   const shutdown = (signal) => {

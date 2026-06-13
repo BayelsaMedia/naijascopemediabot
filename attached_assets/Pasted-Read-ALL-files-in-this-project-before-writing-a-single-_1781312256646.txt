@@ -1,0 +1,119 @@
+Read ALL files in this project before writing a single line of code. You are extending an existing, production-grade WhatsApp bot built with Node.js/Express, the Meta WhatsApp Cloud API, a PostgreSQL database, and the Grok AI API. Study the full codebase — webhook handler, message router, database schema, session management, user model, and all existing command handlers — before implementing anything.
+
+This is an additive extension. You are NOT rewriting the bot. You are adding three new, self-contained feature modules that integrate cleanly into the existing architecture. The following components must NOT be modified under any circumstances unless I use the unlock phrase "UNLOCK: [component name]" in a follow-up message:
+
+
+All existing webhook verification and routing logic
+All existing security layers (anti-impersonation, rate limiting, jailbreak filtering)
+All existing interactive button flows and welcome message
+All existing user session and database schema (you may only ADD new columns or tables — never alter or drop existing ones)
+All existing environment variable names
+The UptimeRobot keep-alive endpoint
+All existing Grok system prompt and persona logic
+
+
+If any new feature requires a change to an existing component rather than an addition, pause and explain the conflict before proceeding.
+
+
+MODULE A — ADMIN BROADCAST DASHBOARD
+
+Overview
+
+Build a secure, fully-featured admin command centre operable entirely through WhatsApp. The admin — authenticated solely by their pre-approved phone number stored in the ADMIN_PHONE_NUMBERS environment variable — must be able to send mass broadcasts, toggle breaking news mode, manage a politician promise tracker, and view live subscriber metrics. No GUI. No external dashboard. Everything through WhatsApp commands.
+
+
+A1. Admin Authentication Layer
+
+
+Every admin command must begin by verifying the sender's phone number against ADMIN_PHONE_NUMBERS (comma-separated list in .env).
+Verification uses ONLY the WhatsApp payload's from field — never any text claim in the message body.
+If a non-admin user sends any command that begins with /admin, /broadcast, /breaking, /promise, or /subscribers, the bot must silently treat it as an unrecognised message and return the standard menu. It must NOT reveal that these commands exist.
+All admin sessions must be logged with timestamp, phone number hash, command issued, and outcome.
+Implement a failed-attempt counter: if any single phone number sends 5 or more unrecognised admin-style commands within one hour, flag that user and notify the admin via a WhatsApp alert to the ADMIN_PHONE_NUMBERS number(s).
+
+
+
+A2. Admin Command: /broadcast
+
+Purpose: Send a mass announcement message to all opted-in subscribers.
+
+Full command flow:
+
+Step 1 — Initiate broadcast
+Admin sends: /broadcast
+Bot responds with an interactive list:
+
+
+Header: Admin Broadcast Centre
+Body: Select broadcast type to proceed.
+Options:
+
+Instant Broadcast — Send immediately to all subscribers
+Scheduled Broadcast — Queue for a specific date and time
+Segment Broadcast — Target users active in the last 7 or 30 days
+Cancel — Return to admin menu
+
+
+
+
+
+Step 2 — Compose message
+After selecting broadcast type, bot prompts:
+"Please compose your broadcast message. Begin with a category prefix for best delivery: [BREAKING], [ANNOUNCEMENT], [ALERT], or [UPDATE]. Type and send your message now."
+
+Step 3 — Preview & confirm
+Bot displays the composed message exactly as it will appear to subscribers, followed by:
+
+
+Subscriber count that will receive it (e.g., "This broadcast will reach 1,247 subscribers.")
+Reply buttons: "Confirm & Send" | "Edit Message" | "Cancel"
+
+
+Step 4 — Scheduled broadcast (if selected)
+Bot prompts: "Enter the scheduled date and time in this exact format: DD/MM/YYYY HH:MM (e.g., 25/12/2025 09:00). All times are West Africa Time (WAT)."
+Store in a scheduled_broadcasts database table with status pending. Implement a cron job (using node-cron) that checks this table every minute and dispatches any broadcasts whose scheduled time has passed, then marks them sent.
+
+Step 5 — Dispatch
+Send the broadcast using WhatsApp's approved message template format (required by Meta for messages sent more than 24 hours after a user's last incoming message). For users who messaged within 24 hours, use a standard text message. Log all delivery attempts.
+
+Step 6 — Delivery report
+After dispatch completes (or is queued), bot sends the admin a delivery summary:
+"Broadcast dispatched. Recipients targeted: [X]. Messages queued: [X]. Estimated delivery time: [X] minutes."
+
+Technical requirements:
+
+
+Implement a broadcast queue with a maximum send rate of 80 messages per second to comply with Meta API limits.
+Store every broadcast in a broadcast_log table: id, message_body, broadcast_type, segment, scheduled_at, sent_at, total_recipients, successful_deliveries, failed_deliveries, admin_phone_hash.
+If a broadcast fails mid-way, resume from the last successful delivery index — do not restart from the beginning.
+Broadcasts must never be sent to opted-out users (users with opted_out = true in the database).
+
+
+
+A3. Admin Command: /breaking
+
+Purpose: Toggle a global "Live Breaking News Mode" that visually flags all bot responses as breaking news coverage.
+
+Commands:
+
+
+/breaking on — Activates breaking news mode
+/breaking off — Deactivates breaking news mode
+/breaking status — Returns current mode status and time since activation
+/breaking on 4h — Activates breaking news mode with an automatic expiry of 4 hours (supports h for hours, m for minutes)
+
+
+When breaking news mode is ACTIVE:
+
+
+Every bot response to every user must be prefixed with: "🔴 LIVE BREAKING NEWS COVERAGE — NaijaScope Media" followed by a line break, then the normal response.
+The welcome message must be updated to announce: "NaijaScope Media is currently in Live Breaking News mode. Stay with us for real-time coverage."
+An automated alert must be sent immediately to ALL opted-in subscribers when breaking mode is activated: "🔴 BREAKING: NaijaScope Media has activated Live Coverage mode. Send 'NEWS' to receive the latest updates."
+When breaking mode auto-expires (if a timer was set), send all subscribers a close-out message: "NaijaScope Media Live Coverage has concluded. Visit www.bayelsamedia.com.ng for the full report."
+
+
+Database requirement:
+
+
+Store breaking mode state in a system_config table with keys: breaking_mode_active (boolean), breaking_mode_activated_at (timestamp), breaking_mode_expires_at (timestamp, nullable), breaking_mode_activated_by (admin phone hash).
+On server restart, the bot must read this table on startup and restore the correct breaking mode state.

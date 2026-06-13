@@ -117,6 +117,10 @@ export function seedKeywordAlerts(rows) {
 // ── Promise tracker (in-memory, admin-managed) ────────────────────────────────
 export const promiseTracker = new Map();
 
+// ── Admin broadcast wizard state (Module A2) ──────────────────────────────────
+// Map<adminPhone, { step: string, type: string, segment: string, body: string }>
+export const adminWizardState = new Map();
+
 // ── Live breaking mode (admin toggle) ─────────────────────────────────────────
 export const breakingLive = { active: false, topic: "" };
 

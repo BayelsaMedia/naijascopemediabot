@@ -18,6 +18,14 @@ import { pollData } from "../jobs/dailyPoll.js";
 import { SITE_URL } from "../config/constants.js";
 
 export async function handleInteractive(from, replyId, userRow) {
+  // A1/A2: Route admin broadcast wizard replies before any existing flows
+  if (replyId && (replyId.startsWith("broadcast_") || replyId.startsWith("admin_"))) {
+    const { isAdmin, handleAdminInteractive } = await import("./adminHandler.js");
+    if (isAdmin(from)) {
+      await handleAdminInteractive(from, replyId);
+      return;
+    }
+  }
   const items = await fetchRSSItems().catch(() => []);
 
   // ── Onboarding interest picker ───────────────────────────────────────────────

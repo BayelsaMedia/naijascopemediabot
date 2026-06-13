@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname     = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql", "003_opt_out.sql"];
+const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql", "003_opt_out.sql", "004_admin_features.sql"];
 const MIGRATION_DIR = path.join(__dirname, "../../migrations");
 
 const REQUIRED_VARS = [
@@ -91,6 +91,15 @@ export async function validateStartup() {
     logger.info(`[STARTUP] ✅ Loaded ${numbers.length} opted-out user(s) into memory`);
   } catch (err) {
     logger.warn("[STARTUP] ⚠️  Opted-out user seed failed:", err.message);
+  }
+
+  // A3: Restore breaking news mode state from DB (survives restarts)
+  try {
+    const { restoreBreakingState } = await import("../admin/breakingService.js");
+    await restoreBreakingState();
+    logger.info("[STARTUP] ✅ Breaking news state restored from DB");
+  } catch (err) {
+    logger.warn("[STARTUP] ⚠️  Breaking news state restore failed:", err.message);
   }
 
   logger.info("━━━ Startup validation complete ━━━");

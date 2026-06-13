@@ -2,6 +2,7 @@ import axios from "axios";
 import { logger } from "../utils/logger.js";
 import { withRetry } from "../utils/retry.js";
 import { sanitiseLanguage } from "../utils/language.js";
+import { isBreakingActive } from "../admin/breakingService.js";
 
 const BASE_URL = "https://graph.facebook.com/v25.0";
 const getPhoneId = () => process.env.PHONE_NUMBER_ID;
@@ -62,7 +63,11 @@ export async function sendTypingIndicator(to) {
 // ── Core text send ────────────────────────────────────────────────────────────
 export async function sendText(to, text) {
   if (!to || !text) return;
-  const clean  = sanitiseLanguage(String(text));
+  // A3: Prefix all outgoing messages during active breaking news mode
+  const raw    = isBreakingActive()
+    ? `\uD83D\uDD34 LIVE BREAKING NEWS COVERAGE \u2014 NaijaScope Media\n\n${String(text)}`
+    : String(text);
+  const clean  = sanitiseLanguage(raw);
   const chunks = chunkText(clean);
 
   for (let i = 0; i < chunks.length; i++) {
