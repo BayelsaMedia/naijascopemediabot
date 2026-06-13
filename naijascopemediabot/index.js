@@ -5,7 +5,7 @@ import { verifyWebhookSignature, sanitizeInput, isValidPhone, detectImpersonatio
 import { sendText, markAsRead } from "./src/services/whatsappService.js";
 import { sendMainMenu, sendReturnMenu } from "./src/whatsapp/menus.js";
 import { sendOnboardingWelcome } from "./src/whatsapp/onboarding.js";
-import { upsertUser, getUser } from "./src/utils/db.js";
+import { upsertUser, getUser, setOptedOut } from "./src/utils/db.js";
 import { logger, withCorrelationId } from "./src/utils/logger.js";
 import { validateStartup } from "./src/utils/startup.js";
 
@@ -15,6 +15,7 @@ import {
   awaitingTeamName, awaitingFactCheck, awaitingHandoff,
   onboardingPending,
   checkWindowRateLimit, suspendUser, isUserSuspended,
+  isOptedOut, markOptedOut, clearOptedOut,
 } from "./src/state/sessionState.js";
 import { handleInteractive } from "./src/handlers/interactiveHandler.js";
 import { handleText, runTipFlow, runReportFlow } from "./src/handlers/textHandler.js";
@@ -87,7 +88,20 @@ app.post("/webhook", (req, res) => {
       const from      = message.from;
       const messageId = message.id;
       if (!from || !messageId || !isValidPhone(from)) return;
-      if (!trackMessageId(messageId)) return; // dedup
+      if (!trackMessageId(messageId)) return; // dedup (Section 7.1)
+
+      // ── Section 7.3: Group message filtering ─────────────────────────────
+      // Group JIDs in WhatsApp Cloud API end with @g.us or contain a group indicator.
+      // Only respond to group messages that begin with a known trigger keyword.
+      const isGroupMessage = from.includes("@g.us") || message.context?.group_id != null;
+      if (isGroupMessage) {
+        const bodyLower = (message.text?.body || "").trim().toLowerCase();
+        const TRIGGER_WORDS = ["news", "menu", "help", "headlines", "football", "markets", "subscribe"];
+        if (!TRIGGER_WORDS.some(w => bodyLower.startsWith(w))) {
+          logger.info(`[GROUP] Ignored group message from ${from} — no trigger keyword`);
+          return;
+        }
+      }
 
       await markAsRead(messageId);
 
@@ -143,6 +157,47 @@ app.post("/webhook", (req, res) => {
       } catch (err) {
         logger.error("[WEBHOOK] DB error for", from, "—", err.message);
         dbAvailable = false;
+      }
+
+      // ── Section 7.9: Opt-out / re-engagement handling ────────────────────
+      // In-memory cache is the fast path; DB persists across restarts.
+      if (message.type === "text") {
+        const bodyRaw   = (message.text?.body || "").trim();
+        const bodyLow   = bodyRaw.toLowerCase();
+
+        const OPT_OUT_TRIGGERS  = ["stop", "unsubscribe", "opt out", "opt-out", "remove me"];
+        const RE_ENGAGE_TRIGGERS = ["start", "hi", "hello", "hey"];
+
+        // Check in-memory cache first (fast path)
+        const currentlyOptedOut = isOptedOut(from) || existingUser?.opted_out;
+
+        if (currentlyOptedOut) {
+          if (RE_ENGAGE_TRIGGERS.some(t => bodyLow === t || bodyLow.startsWith(t + " "))) {
+            // User wishes to re-engage
+            clearOptedOut(from);
+            try { await setOptedOut(from, false); } catch (_) {}
+            await sendText(from, "Welcome back to NaijaScope Media. Your subscription has been reactivated. You will receive news briefings and alerts as normal.");
+            await sendOnboardingWelcome(from);
+          } else {
+            // User is opted out and this is not a re-engage message — drop silently
+            logger.info(`[OPT-OUT] Dropped message from opted-out user: ${from}`);
+          }
+          return;
+        }
+
+        if (OPT_OUT_TRIGGERS.some(t => bodyLow === t || bodyLow.startsWith(t + " "))) {
+          markOptedOut(from);
+          try {
+            await setOptedOut(from, true);
+            // Remove all subscriptions
+            const { removeSubscription } = await import("./src/services/alertService.js");
+            await removeSubscription(from, "daily_digest").catch(() => {});
+            await removeSubscription(from, "breaking_news").catch(() => {});
+            await removeSubscription(from, "opportunities").catch(() => {});
+          } catch (_) {}
+          await sendText(from, "You have been unsubscribed from all NaijaScope Media communications. No further messages will be sent to you.\n\nTo re-subscribe at any time, simply send 'Start' or 'Hi'.");
+          return;
+        }
       }
 
       // ── New user: send onboarding immediately, before any other routing ────
@@ -246,10 +301,10 @@ app.post("/webhook", (req, res) => {
         return;
       }
 
-      // ── Smart returning-user experience (away > 24 h) ─────────────────────
+      // ── Section 7.7: Session timeout — re-engagement after 12h absence ──────
       if (userRow?.last_seen) {
         const hoursSince = (Date.now() - new Date(userRow.last_seen).getTime()) / 3_600_000;
-        if (hoursSince > 24) {
+        if (hoursSince > 12) {
           const items    = await fetchRSSItems();
           const newCount = countNewStoriesSince(items, userRow.last_seen);
           const topCats  = detectTopCategories(items.slice(0, 15));

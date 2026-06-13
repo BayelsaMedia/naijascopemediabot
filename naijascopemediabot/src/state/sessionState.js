@@ -1,17 +1,26 @@
 import { MAX_PROCESSED_IDS, RATE_LIMIT_MS } from "../config/constants.js";
 
 // ── Message deduplication ─────────────────────────────────────────────────────
-const processedMessageIds = new Set();
+const processedMessageIds = new Map(); // id → expiry timestamp
 
 export function trackMessageId(id) {
-  if (processedMessageIds.has(id)) return false;
-  processedMessageIds.add(id);
-  if (processedMessageIds.size > MAX_PROCESSED_IDS)
-    processedMessageIds.delete(processedMessageIds.values().next().value);
+  const now = Date.now();
+  if (processedMessageIds.has(id)) {
+    const expiry = processedMessageIds.get(id);
+    if (now < expiry) return false; // duplicate within 30s
+  }
+  processedMessageIds.set(id, now + 30_000); // 30-second dedup window
+  // Prune expired entries when the map grows large
+  if (processedMessageIds.size > MAX_PROCESSED_IDS) {
+    for (const [k, v] of processedMessageIds) {
+      if (v < now) processedMessageIds.delete(k);
+      if (processedMessageIds.size <= MAX_PROCESSED_IDS) break;
+    }
+  }
   return true;
 }
 
-// ── Per-user rate limiting (AI / voice — simple cooldown) ────────────────────
+// ── Per-user rate limiting (AI / voice — simple cooldown) ─────────────────────
 const rateLimit = new Map();
 
 export function checkRateLimit(userId) {
@@ -21,20 +30,14 @@ export function checkRateLimit(userId) {
   return true;
 }
 
-// ── 2d. Sliding-window rate limit: max 20 responses per 10 minutes ────────────
-const WINDOW_MS       = 10 * 60 * 1_000; // 10 minutes
-const WINDOW_MAX      = 20;               // max responses per window
-const windowRateLimit = new Map();        // userId → number[]  (timestamps of recent responses)
-const windowWarnSent  = new Set();        // userId — we only send the warning once per block
+// ── Sliding-window rate limit: max 20 responses per 10 minutes ────────────────
+const WINDOW_MS       = 10 * 60 * 1_000;
+const WINDOW_MAX      = 20;
+const windowRateLimit = new Map();
+const windowWarnSent  = new Set();
 
-/**
- * Record a response sent to this user and check if the window limit is exceeded.
- * Returns true  → OK to respond.
- * Returns false → limit exceeded; caller should drop silently (warning already sent once).
- * Returns "warn" → limit just exceeded for the first time; caller should send the warning message.
- */
 export function checkWindowRateLimit(userId) {
-  const now  = Date.now();
+  const now        = Date.now();
   const timestamps = (windowRateLimit.get(userId) || []).filter(t => now - t < WINDOW_MS);
 
   if (timestamps.length >= WINDOW_MAX) {
@@ -47,37 +50,49 @@ export function checkWindowRateLimit(userId) {
 
   timestamps.push(now);
   windowRateLimit.set(userId, timestamps);
-  windowWarnSent.delete(userId); // reset warn flag when window clears
+  windowWarnSent.delete(userId);
   return true;
 }
 
-// ── 2f. 24-hour session suspension (harmful content) ─────────────────────────
-const suspendedUsers = new Map(); // userId → expiry timestamp (ms)
+// ── 24-hour session suspension (harmful content) ──────────────────────────────
+const suspendedUsers = new Map(); // userId → expiry timestamp
 
-/**
- * Suspend a user for 24 hours.
- */
 export function suspendUser(userId) {
   suspendedUsers.set(userId, Date.now() + 24 * 60 * 60 * 1_000);
 }
 
-/**
- * Check if a user is currently suspended.
- * Auto-clears expired suspensions.
- */
 export function isUserSuspended(userId) {
   const expiry = suspendedUsers.get(userId);
   if (!expiry) return false;
-  if (Date.now() >= expiry) {
-    suspendedUsers.delete(userId);
-    return false;
-  }
+  if (Date.now() >= expiry) { suspendedUsers.delete(userId); return false; }
   return true;
 }
 
-// ── Multi-step user flows ─────────────────────────────────────────────────────
-export const tipsInProgress     = new Map();  // userId → { step, data }
-export const reportsInProgress  = new Map();  // userId → { step, data }
+// ── Opt-out state (in-memory cache; canonical state is in the DB) ─────────────
+const optedOutCache = new Set();   // users who have opted out
+const reEngageCache = new Set();   // users who have just re-engaged (do not re-send welcome twice)
+
+export function markOptedOut(userId) {
+  optedOutCache.add(userId);
+}
+
+export function clearOptedOut(userId) {
+  optedOutCache.delete(userId);
+  reEngageCache.add(userId);
+  setTimeout(() => reEngageCache.delete(userId), 5_000);
+}
+
+export function isOptedOut(userId) {
+  return optedOutCache.has(userId);
+}
+
+export function seedOptedOutUsers(numbers) {
+  for (const n of numbers) optedOutCache.add(n);
+}
+
+// ── Multi-step user flows ──────────────────────────────────────────────────────
+export const tipsInProgress     = new Map();
+export const reportsInProgress  = new Map();
 export const awaitingTeamName   = new Set();
 export const awaitingFactCheck  = new Set();
 export const awaitingHandoff    = new Map();
@@ -85,8 +100,8 @@ export const awaitingHandoff    = new Map();
 // ── Last-sent news (enables save / translate / more actions) ──────────────────
 export const lastSentNews = new Map();
 
-// ── Keyword alerts (in-memory, seeded from DB on startup) ────────────────────
-export const userAlerts = new Map();  // userId → Set<string>
+// ── Keyword alerts (in-memory, seeded from DB on startup) ─────────────────────
+export const userAlerts = new Map();
 
 export function addUserAlert(userId, keyword) {
   if (!userAlerts.has(userId)) userAlerts.set(userId, new Set());
@@ -100,21 +115,20 @@ export function seedKeywordAlerts(rows) {
 }
 
 // ── Promise tracker (in-memory, admin-managed) ────────────────────────────────
-export const promiseTracker = new Map();  // politician → [{ promise, status, date }]
+export const promiseTracker = new Map();
 
-// ── Live breaking mode (admin toggle) ────────────────────────────────────────
+// ── Live breaking mode (admin toggle) ─────────────────────────────────────────
 export const breakingLive = { active: false, topic: "" };
 
 // ── Onboarding state ──────────────────────────────────────────────────────────
-// Tracks users who have just received the welcome message but not yet picked an interest.
 export const onboardingPending = new Set();
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 export const analytics = {
-  totalUsers:    new Set(),
+  totalUsers:     new Set(),
   messagesPerDay: new Map(),
-  commandCounts: new Map(),
-  peakHours:     new Array(24).fill(0),
+  commandCounts:  new Map(),
+  peakHours:      new Array(24).fill(0),
 };
 
 export function track(from, command) {

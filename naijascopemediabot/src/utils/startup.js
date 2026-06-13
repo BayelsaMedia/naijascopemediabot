@@ -6,7 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname     = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql"];
+const MIGRATIONS    = ["001_initial_schema.sql", "002_add_user_preferences.sql", "003_opt_out.sql"];
 const MIGRATION_DIR = path.join(__dirname, "../../migrations");
 
 const REQUIRED_VARS = [
@@ -80,6 +80,17 @@ export async function validateStartup() {
     logger.info(`[STARTUP] ✅ Loaded ${rows.length} keyword alert(s) into memory`);
   } catch (err) {
     logger.warn("[STARTUP] ⚠️  Keyword alert seed failed:", err.message);
+  }
+
+  // Seed opted-out users from DB into in-memory cache
+  try {
+    const { seedOptedOutUsers } = await import("../state/sessionState.js");
+    const optRes = await query("SELECT whatsapp_number FROM users WHERE opted_out = TRUE");
+    const numbers = optRes.rows.map(r => r.whatsapp_number);
+    seedOptedOutUsers(numbers);
+    logger.info(`[STARTUP] ✅ Loaded ${numbers.length} opted-out user(s) into memory`);
+  } catch (err) {
+    logger.warn("[STARTUP] ⚠️  Opted-out user seed failed:", err.message);
   }
 
   logger.info("━━━ Startup validation complete ━━━");

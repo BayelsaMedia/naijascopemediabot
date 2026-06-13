@@ -7,6 +7,7 @@ import { sendAfterNewsMenu } from "../whatsapp/menus.js";
 import { lastSentNews, userAlerts } from "../state/sessionState.js";
 import { CATEGORY_KEYWORDS, CATEGORY_META, BAYELSA_LGAS, RSS_FEED_URL, SITE_URL, CACHE_TTL_MS } from "../config/constants.js";
 import { translateArticle } from "./languageService.js";
+import { appendReferralIfDue } from "../utils/referral.js";
 
 const rssParser = new RSSParser();
 
@@ -115,10 +116,10 @@ function buildStoryCard(items, headerText) {
 // ── Send news to user ─────────────────────────────────────────────────────────
 export async function sendNewsItems(to, items, header, userRow) {
   if (!items || items.length === 0) {
-    await sendText(to, `Nothing breaking at this moment — check ${SITE_URL} for the latest. I'll alert you the moment something hits. 🔔`);
+    await sendText(to, `No new stories are available at this moment. Visit ${SITE_URL} for the latest coverage, or set up a keyword alert to be notified as soon as a relevant story publishes.`);
     await sendButtons(to, "What would you like to do?", [
-      { id: "menu_subscribe", title: "📡 Set Alerts" },
-      { id: "main_menu",      title: "🏠 Main Menu"  },
+      { id: "menu_subscribe", title: "Set Alerts"  },
+      { id: "main_menu",      title: "Main Menu"   },
     ]);
     return;
   }
@@ -133,6 +134,9 @@ export async function sendNewsItems(to, items, header, userRow) {
       storyCard = await translateArticle(storyCard, userRow.language_pref);
     } catch (_) {}
   }
+
+  // Section 6: append referral every 3rd substantive news delivery
+  storyCard = appendReferralIfDue(to, storyCard, "news");
 
   await sendText(to, storyCard);
   await sendAfterNewsMenu(to);
@@ -149,7 +153,7 @@ export async function checkKeywordAlerts(newItems) {
           const { emoji } = categorizeStory(item);
           await sendText(
             userId,
-            `🔔 Story Alert — "${kw}"\n\n${emoji} ${item.title}\n\nThis story matches your alert.\n🔗 ${item.link}\n\nReply "why" for AI context, or "save" to bookmark it.`
+            `NaijaScope Media — Story Alert: "${kw}"\n\n${emoji} ${item.title}\n\nThis story matches your alert. Read the full report at the link below.\n${item.link}\n\nType "why" for editorial context, or "save" to add it to your reading list.`
           );
           await new Promise(r => setTimeout(r, 400));
           break;

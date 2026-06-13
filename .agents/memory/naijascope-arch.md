@@ -76,3 +76,21 @@ All user-facing strings across the entire codebase must conform to:
 - PROMPT_EN is the authoritative system prompt. PROMPT_PIDGIN is an alias of PROMPT_EN (pidgin is disallowed per policy).
 - `resolveSystemPrompt(userRow)` in `aiService.js` handles language variants: appends `PROMPT_IGBO_ADDENDUM` for `lang="ig"` and `PROMPT_YORUBA_ADDENDUM` for `lang="yo"`. All other langs → English.
 - Files updated in Section 4c: `textHandler.js`, `interactiveHandler.js`, `mediaHandler.js`, `onboarding.js`, `alertService.js`, `dailyBriefing.js`, `eveningWrapUp.js`, `dailyPoll.js`, `index.js`.
+
+## Section 5 — Language Enforcement (completed)
+- `src/utils/language.js` — `sanitiseLanguage(text)` post-processes all outgoing text: replaces common pidgin/slang phrases with formal equivalents via a regex map.
+- Applied in `whatsappService.js` `sendText` (all outgoing messages) and explicitly in `aiService.js` on Groq completions.
+
+## Section 6 — Website Referral Architecture (completed)
+- `src/utils/referral.js` — `tickReferral(userId)` → true every 3rd call per user; `getWebsiteReferral(context)` → context-aware sentence; `appendReferralIfDue(userId, text, context)` → appends referral if 3rd tick.
+- Applied in `aiService.js` (general chat) and `newsService.js` `sendNewsItems` (news deliveries).
+- Static import in `newsService.js` (not dynamic) — avoids per-call module resolution overhead.
+
+## Section 7 — Edge Case & Resilience (completed)
+- **Opt-out**: `src/state/sessionState.js` adds `isOptedOut`, `markOptedOut`, `clearOptedOut`, `seedOptedOutUsers`. `src/utils/db.js` adds `setOptedOut(number, bool)`. Migration `003_opt_out.sql` adds `opted_out BOOLEAN DEFAULT FALSE, opted_out_at TIMESTAMPTZ`. `startup.js` seeds opted-out users from DB on boot. `index.js` handles "stop"/"unsubscribe"/"opt out"/"opt-out"/"remove me" → mark + DB update + subscription removal; "start"/"hi"/"hello"/"hey" from opted-out user → clear + re-onboard.
+- **Group filtering**: `index.js` checks `from.includes("@g.us")` — only responds if message starts with a trigger keyword (news, menu, help, headlines, football, markets, subscribe).
+- **Session timeout**: Changed from 24h to 12h in `index.js` returning-user branch.
+- **Message splitting**: `whatsappService.js` `sendText` splits at 3500 chars with `(1/2 — continued below)` / `(2/2)` markers.
+- **Typing indicator**: `sendTypingIndicator(to)` best-effort call in `aiService.js` before Groq completion.
+- **Unknown button fallback**: `interactiveHandler.js` falls through to `sendMainMenu(from, userRow)` for any unrecognised `replyId`.
+- **Opt-out check order**: Placed AFTER DB getUser/upsertUser but BEFORE new-user onboarding. Uses in-memory cache as fast path (works even when DB is temporarily down).

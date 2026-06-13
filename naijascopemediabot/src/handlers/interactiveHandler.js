@@ -323,4 +323,8 @@ export async function handleInteractive(from, replyId, userRow) {
     await sendMainMenu(from, userRow);
     return;
   }
+
+  // ── Section 7.12: Unknown / unrecognised button ID — fall back to main menu ──
+  logger.info(`[INTERACTIVE] Unknown replyId "${replyId}" from ${from} — sending main menu`);
+  await sendMainMenu(from, userRow);
 }

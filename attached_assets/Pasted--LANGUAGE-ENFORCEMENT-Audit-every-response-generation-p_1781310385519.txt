@@ -1,0 +1,45 @@
+ LANGUAGE ENFORCEMENT
+
+
+Audit every response generation path — Grok-generated and hardcoded — and ensure NO pidgin English exists anywhere in the output pipeline.
+Create a post-processing filter function sanitiseLanguage(text) that scans outgoing messages for common Nigerian pidgin phrases and replaces them with their standard English equivalents. Examples: "no wahala" → "no problem", "abeg" → "please", "dey" → "is/are", "oga" → "sir/management", "sabi" → "know/understand".
+The default language is English. The bot MUST NOT switch to Igbo or Yoruba unless the user explicitly requests it in their current message. Do not switch based on a user's name or assumed ethnicity.
+Store the user's language preference (if they have set one) in the database per user session, so their preference persists across conversations.
+
+
+
+SECTION 6 — WEBSITE REFERRAL ARCHITECTURE
+
+
+Add a referralCounter tracker per user session. Every third substantive response must include a professional, contextual reference to www.bayelsamedia.com.ng.
+Build a getWebsiteReferral(context) utility function that returns one of several pre-written, contextually varied referral phrases based on the topic of the current response (news, market data, contact, about). This avoids repetitive copy-paste referrals.
+Example referral phrases (rotate, never repeat consecutively):
+
+"Read the full story and related coverage on NaijaScope Media at www.bayelsamedia.com.ng."
+"For comprehensive coverage of this developing story, visit www.bayelsamedia.com.ng."
+"NaijaScope Media's editorial team provides daily in-depth reports at www.bayelsamedia.com.ng."
+"Stay informed with real-time updates from our newsroom at www.bayelsamedia.com.ng."
+
+
+
+The referral must ALWAYS appear as the final sentence of the response when included — never in the middle of a response.
+
+
+
+SECTION 7 — EDGE CASE & RESILIENCE HANDLING (UNTHOUGHT SCENARIOS)
+
+Implement all of the following to ensure production-grade reliability:
+
+
+Duplicate webhook prevention: Log each incoming message ID in a short-lived in-memory cache (or database table). If the same message ID is received twice within 30 seconds (WhatsApp sometimes delivers webhooks twice), process it only once.
+Media message handling: When a user sends an image, audio, video, document, or sticker (instead of text), respond professionally: "Thank you for your message. NaijaScope Media Intelligence Bot currently processes text queries only. Please type your question or select an option from the menu."
+Group message filtering: If the bot is added to a group chat, it must only respond when directly mentioned (@mentioned) or when a message starts with a trigger keyword. It must never respond to all group messages.
+Status update filtering: WhatsApp sends webhook events for message status updates (sent, delivered, read). These must be detected and silently ignored — never processed as incoming user messages.
+Grok API failure fallback: If the Grok API returns an error, times out, or returns an empty response, the bot must send a graceful fallback: "NaijaScope Media Intelligence Bot is experiencing a brief interruption. Please try again in a moment, or visit www.bayelsamedia.com.ng for the latest news directly."
+Message length enforcement: WhatsApp has a 4,096-character limit per message. If a generated response exceeds this limit, split it into sequential messages of no more than 3,500 characters each, with a footer on the first message: "(1/2 — continued below)" and on the second: "(2/2)".
+Session timeout & re-engagement: If a user has not sent a message in 12 hours, treat their next message as a fresh session and send the full welcome/greeting message before responding to their query.
+Typing indicator: Before sending any AI-generated response, send a typing_on indicator via the WhatsApp Business API to signal the bot is processing.
+Opt-out handling: If a user sends "Stop", "Unsubscribe", "Opt out", or "Remove me", the bot must: (a) acknowledge professionally, (b) mark the user as opted-out in the database, (c) cease sending proactive messages to that user. The user can re-engage at any time by sending "Start" or "Hi".
+Error logging: All errors — Grok errors, WhatsApp API errors, database errors, and webhook errors — must be logged with timestamp, error type, user phone number hash (not plain number, for privacy), and error message. Use a structured logger (console.error with JSON format or a logging library).
+Environment variable validation on startup: On server start, validate that all required environment variables are present. If any are missing, log a clear error and prevent the server from starting rather than failing silently mid-request.
+Unknown/unsupported interactive button IDs: If the bot receives an interactive message with a button or list ID it does not recognise, respond with the standard menu rather than throwing an error.
