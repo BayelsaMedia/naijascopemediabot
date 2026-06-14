@@ -25,7 +25,7 @@ export const CATEGORY_META = {
 
 export const BAYELSA_LGAS = ["Yenagoa", "Ogbia", "Sagbama", "Ekeremor", "Kolokuma/Opokuma", "Nembe", "Brass", "Southern Ijaw"];
 
-export const RSS_FEED_URL   = "https://www.bayelsamedia.com.ng/feed";
+export const RSS_FEED_URL   = "https://dailypost.ng/feed/";
 export const SITE_URL       = "www.bayelsamedia.com.ng";
 export const SITE_FULL_URL  = "https://www.bayelsamedia.com.ng";
 
