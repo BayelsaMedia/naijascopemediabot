@@ -1,0 +1,139 @@
+Read ALL files in this project first before making any changes.
+
+This is a WhatsApp bot built with Node.js and Express, connected to 
+
+the Meta WhatsApp Cloud API. It is deployed on Render.
+
+Before doing anything else, identify:
+
+- Which AI/LLM service is already integrated (Groq, Gemini, OpenAI, 
+
+  or any other) by reading the existing code and .env variable names
+
+- Where the main message handler function is
+
+- Where the security/suspension logic lives
+
+- Whether suspensions are stored in memory or a database
+
+Use whatever AI service is already in this project. Do not switch it, 
+
+replace it, or add a new one.
+
+═══════════════════════════════════════════
+
+🔒 DO NOT TOUCH THESE — LOCKED:
+
+═══════════════════════════════════════════
+
+- Webhook verification logic
+
+- All existing AI/LLM integration (whatever service is already there)
+
+- All existing message sending functions
+
+- PostgreSQL/database connection if present
+
+- Any existing language, menu, or interactive message features
+
+- Environment variable names — use exactly what already exists
+
+- package.json and dependencies
+
+- Webhook route path
+
+- All existing console.log formats
+
+- Every file except the main bot handler file
+
+═══════════════════════════════════════════
+
+✅ ONLY DO THIS — ONE FOCUSED CHANGE:
+
+═══════════════════════════════════════════
+
+Add an admin whitelist system so my phone numbers are never suspended, 
+
+blocked, or dropped by the bot's own security system.
+
+STEP 1 — Add admin numbers array at the very top of the main bot file:
+
+const ADMIN_NUMBERS = [
+
+  '2348028590690',
+
+  '2349161946339'
+
+];
+
+Add this comment above it:
+
+// Admin numbers — bypass all security checks. Add trusted numbers here.
+
+STEP 2 — Add an admin bypass block inside the main incoming message 
+
+handler. This block must run BEFORE any security checks, spam checks, 
+
+suspension checks, or content filters. 
+
+If the sender's number is in ADMIN_NUMBERS:
+
+- Skip ALL security and suspension logic completely
+
+- Log: "[ADMIN] Admin message from {number} — all security bypassed"
+
+- Still send the message through the existing AI service as normal
+
+- Never block, drop, or suspend the message for any reason
+
+STEP 3 — Add these admin commands that only work from ADMIN_NUMBERS:
+
+"admin status"
+
+→ Reply with bot running status, number of users who have messaged 
+
+  the bot, number of currently suspended users, bot uptime in minutes
+
+"unsuspend {phonenumber}"  
+
+→ Remove that number from suspension (memory and database if applicable)
+
+→ Reply: "✅ {number} has been unsuspended"
+
+"clear suspensions"
+
+→ Clear ALL suspended users from memory and database if applicable
+
+→ Reply: "✅ All suspensions cleared"
+
+STEP 4 — If suspensions are stored in a database, add a helper function 
+
+that also removes the suspension from the database when unsuspending.
+
+═══════════════════════════════════════════
+
+⚠️ RULES — READ CAREFULLY:
+
+═══════════════════════════════════════════
+
+- Do NOT rename any existing functions
+
+- Do NOT change how non-admin messages are handled
+
+- Do NOT add any new npm packages
+
+- Do NOT change or add environment variables
+
+- Do NOT assume which AI service is used — read the code first
+
+- The admin bypass MUST be the very first check in the message handler
+
+- Normal users must be completely unaffected by this change
+
+After making changes, tell me:
+
+1. Which AI service you found already in the project
+
+2. The exact lines you added and their line numbers
+
+3. Confirm every locked item was not touched

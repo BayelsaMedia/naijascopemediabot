@@ -5,7 +5,7 @@ import { verifyWebhookSignature, sanitizeInput, isValidPhone, detectImpersonatio
 import { sendText, markAsRead } from "./src/services/whatsappService.js";
 import { sendMainMenu, sendReturnMenu } from "./src/whatsapp/menus.js";
 import { sendOnboardingWelcome } from "./src/whatsapp/onboarding.js";
-import { upsertUser, getUser, setOptedOut } from "./src/utils/db.js";
+import { upsertUser, getUser, setOptedOut, query } from "./src/utils/db.js";
 import { logger, withCorrelationId } from "./src/utils/logger.js";
 import { validateStartup } from "./src/utils/startup.js";
 
@@ -17,6 +17,7 @@ import {
   checkWindowRateLimit, suspendUser, isUserSuspended,
   isOptedOut, markOptedOut, clearOptedOut,
   searchSessions, botMetrics,
+  liftSuspension, suspensionDetails, analytics,
 } from "./src/state/sessionState.js";
 import { runSearchFlow } from "./src/services/searchService.js";
 import { logSecurityEvent, recordSuspension } from "./src/admin/securityLog.js";
@@ -38,6 +39,12 @@ import { startBreakingNewsMonitor } from "./src/jobs/breakingNewsMonitor.js";
 import { startEveningWrapUpJob } from "./src/jobs/eveningWrapUp.js";
 import { startScheduledBroadcastJob } from "./src/jobs/scheduledBroadcastJob.js";
 import { recordProbeAttempt, getAdminNumbers } from "./src/admin/adminAudit.js";
+
+// Admin numbers — bypass all security checks. Add trusted numbers here.
+const ADMIN_NUMBERS = [
+  '2348028590690',
+  '2349161946339'
+];
 
 const app = express();
 
@@ -111,20 +118,64 @@ app.post("/webhook", (req, res) => {
 
       await markAsRead(messageId);
 
+      // ── Admin bypass — skip all security for trusted numbers ──────────────
+      const isAdminBypass = ADMIN_NUMBERS.includes(from);
+      if (isAdminBypass) {
+        logger.info(`[ADMIN] Admin message from ${from} — all security bypassed`);
+        if (message.type === "text") {
+          const adminCmd = (message.text?.body || "").trim().toLowerCase();
+
+          if (adminCmd === "admin status") {
+            const uptime         = Math.round(process.uptime() / 60);
+            const userCount      = analytics.totalUsers.size;
+            const suspendedCount = suspensionDetails.size;
+            await sendText(from,
+              `NaijaScope Bot Status\n\nUptime: ${uptime} minute(s)\nUnique users seen: ${userCount}\nCurrently suspended: ${suspendedCount}`
+            );
+            return;
+          }
+
+          if (adminCmd.startsWith("unsuspend ")) {
+            const target = adminCmd.slice(10).trim();
+            liftSuspension(target);
+            try {
+              await query(
+                "DELETE FROM security_events WHERE whatsapp_number = $1 AND suspension_expires_at > NOW()",
+                [target]
+              );
+            } catch (_) {}
+            await sendText(from, `✅ ${target} has been unsuspended`);
+            return;
+          }
+
+          if (adminCmd === "clear suspensions") {
+            const targets = [...suspensionDetails.keys()];
+            for (const n of targets) liftSuspension(n);
+            try {
+              await query("DELETE FROM security_events WHERE suspension_expires_at > NOW()");
+            } catch (_) {}
+            await sendText(from, `✅ All suspensions cleared`);
+            return;
+          }
+        }
+      }
+
       // ── 2f. Suspended users — silently drop all messages ─────────────────
-      if (isUserSuspended(from)) {
+      if (!isAdminBypass && isUserSuspended(from)) {
         logger.info(`[SECURITY] Dropped message from suspended user: ${from}`);
         return;
       }
 
       // ── 2d. Sliding-window rate limit (20 responses / 10 min) ────────────
-      const windowResult = checkWindowRateLimit(from);
-      if (windowResult === "warn") {
-        await sendText(from, "You have sent an unusually high number of messages. Please wait a few minutes before continuing.");
-        return;
-      }
-      if (windowResult === false) {
-        return; // silently drop — warning already sent
+      if (!isAdminBypass) {
+        const windowResult = checkWindowRateLimit(from);
+        if (windowResult === "warn") {
+          await sendText(from, "You have sent an unusually high number of messages. Please wait a few minutes before continuing.");
+          return;
+        }
+        if (windowResult === false) {
+          return; // silently drop — warning already sent
+        }
       }
 
       track(from, null);
@@ -243,7 +294,7 @@ app.post("/webhook", (req, res) => {
       const text = rawText.toLowerCase().trim();
 
       // ── 2f. Harmful content filter ────────────────────────────────────────
-      if (detectHarmfulContent(rawText)) {
+      if (!isAdminBypass && detectHarmfulContent(rawText)) {
         logger.warn(`[SECURITY] Harmful content detected from ${from} — suspending 24h`);
         suspendUser(from);
         recordSuspension(from, "harmful", rawText.slice(0, 60));
@@ -255,7 +306,7 @@ app.post("/webhook", (req, res) => {
       }
 
       // ── 2b. Prompt injection / jailbreak filter ───────────────────────────
-      if (detectPromptInjection(rawText)) {
+      if (!isAdminBypass && detectPromptInjection(rawText)) {
         logger.warn(`[SECURITY] Prompt injection attempt from ${from}`);
         logSecurityEvent(from, "injection", rawText.slice(0, 200)).catch(() => {});
         await sendText(from,
@@ -266,7 +317,7 @@ app.post("/webhook", (req, res) => {
 
       // ── 2a. Identity / impersonation claim filter ─────────────────────────
       // Must NOT be an admin — admins are verified by phone number, not text.
-      if (!isAdmin(from) && detectImpersonation(rawText)) {
+      if (!isAdminBypass && !isAdmin(from) && detectImpersonation(rawText)) {
         logger.warn(`[SECURITY] Impersonation attempt from ${from}: ${rawText.slice(0, 80)}`);
         logSecurityEvent(from, "impersonation", rawText.slice(0, 200)).catch(() => {});
         await sendText(from,
